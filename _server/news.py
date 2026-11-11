@@ -15,7 +15,8 @@ UA = "Mozilla/5.0 (compatible; FVG-InsightsBot/1.0; +https://summitbrilliance.co
 MAX_ITEMS, MAX_AGE_DAYS = 80, 45
 KEYWORDS = {
  "uni": r"student|undergrad|graduate|admission|scholarship|career|job|employ|alumni|commencement|education|learning|teaching|campus|internship|young|youth|future of work|skills|AI\b|artificial intelligence|degree|course|summer|visa|international|ranking|QS\b|study abroad|tuition|fees|enrol|applicant",
-"people": r"Jamie Dimon|Dimon\b|Jensen Huang|Nvidia CEO|Elon Musk|Musk\b|Donald Trump|Trump\b|Sam Altman|Satya Nadella|Tim Cook|Warren Buffett|Mark Zuckerberg",
+"people": (r"Jamie Dimon|Dimon\b|Jensen Huang|Nvidia CEO|Elon Musk|Musk\b|Donald Trump|Trump\b|Sam Altman|Satya Nadella|Tim Cook|Warren Buffett|Mark Zuckerberg",
+            r"\bsays\b|\bsaid\b|interview|advice|tells|told|Gen Z|young|youth|career|graduates?|students?|college|universit|success|lesson|future|predict|warns|thinks|believes|view|vision|habit|work ethic|hiring|jobs?\b|AI\b|skills?"),
  "talks": r"career|work|job|learn|education|student|young|youth|gen z|future|leader|success|skill|purpose|school|college|universit|graduate|mentor|confidence|ambition|AI\b|artificial intelligence|habit|focus|motivation|decision",
 }
 NS = {"a": "http://www.w3.org/2005/Atom", "media": "http://search.yahoo.com/mrss/", "content": "http://purl.org/rss/1.0/modules/content/"}
@@ -82,7 +83,8 @@ def parse(data):
                 m = re.search(r"<img[^>]+src=[\"']([^\"']+)", html.unescape(body), re.I)
                 if m: img = m.group(1)
             out.append({"title": txt(i, "title"), "link": txt(i, "link").strip(), "date": txt(i, "pubDate") or txt(i, "{http://purl.org/dc/elements/1.1/}date"),
-                        "summary": txt(i, "description"), "image": img, "src": (src.text if src is not None else "")})
+                        "summary": txt(i, "description"), "image": img, "src": (src.text if src is not None else ""),
+                        "site": (src.get("url", "") if src is not None else "")})
     return out
 
 def fetch_feed(f):
@@ -94,12 +96,28 @@ def fetch_feed(f):
         data, final = get(feed)
     return parse(data), final
 
-def og_image(url):
-    if "news.google.com" in url: return ""
+SKIP_IMG = re.compile(r"\.svg|^data:|logo|icon|sprite|avatar|pixel|spacer|blank|placeholder|badge|button|\.gif", re.I)
+
+def first_img(page, base):
+    """The first real photo inside the article (not logos, icons or tracking pixels)."""
+    m = re.search(r"<article\b.*?</article>", page, re.S | re.I) or re.search(r"<main\b.*?</main>", page, re.S | re.I)
+    for t in re.finditer(r"<img\b[^>]*>", m.group(0) if m else page, re.I):
+        tag = t.group(0)
+        src = re.search(r'\bdata-src=["\']([^"\']+)', tag, re.I) or re.search(r'\bsrc=["\']([^"\']+)', tag, re.I)
+        if not src: continue
+        u = urllib.parse.urljoin(base, html.unescape(src.group(1)).strip())
+        if not u.startswith("https://") or SKIP_IMG.search(u): continue
+        if any(int(x) < 200 for x in re.findall(r'\b(?:width|height)=["\']?(\d+)', tag)): continue
+        return u
+    return ""
+
+def og_image(url, first=True):
+    """Cover image of a page: its og:image / twitter:image, else (if first) the first photo in the article."""
+    if "news.google.com" in url or not url.startswith("https://"): return ""
     try:
         req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "text/html"})
         with urllib.request.urlopen(req, timeout=10) as r:
-            page = r.read(400_000).decode("utf-8", "ignore"); base = r.geturl()
+            page = r.read(600_000).decode("utf-8", "ignore"); base = r.geturl()
     except Exception:
         return ""
     for pat in (r'<meta[^>]+(?:property|name)=["\']og:image(?::secure_url)?["\'][^>]+content=["\']([^"\']+)',
@@ -108,8 +126,8 @@ def og_image(url):
         m = re.search(pat, page, re.I)
         if m:
             u = urllib.parse.urljoin(base, html.unescape(m.group(1)).strip())
-            return u if u.startswith("https://") else ""
-    return ""
+            if u.startswith("https://"): return u
+    return first_img(page, base) if first else ""
 
 IMG_DIR = "/opt/fvg-news/img"
 TR_CACHE = "/opt/fvg-news/translations.json"
@@ -168,24 +186,34 @@ def run(check=False):
             if d is None or d < oldest or d > now + timedelta(days=1): continue
             summary = clean(it["summary"])
             source = f["name"]
+            site = ""
             if "news.google.com" in f["url"]:
                 source = clean(it.get("src") or "", 60) or source
                 if " - " in title: title, src2 = title.rsplit(" - ", 1); source = it.get("src") or src2
                 summary = ""  # Google News descriptions are just link lists
-            if f.get("filter") and not re.search(KEYWORDS.get(f.get("kw", f["cat"]), "."), title + " " + summary, re.I): continue
+                site = (it.get("site") or "").replace("http://", "https://", 1)
+            pats = KEYWORDS.get(f.get("kw", f["cat"]), ".")
+            if f.get("filter") and not all(re.search(p, title + " " + summary, re.I) for p in ((pats,) if isinstance(pats, str) else pats)): continue
             key = re.sub(r"\W+", "", title.lower())[:80]
             if key in seen: continue
             seen.add(key)
             kept.append({"cat": f["cat"], "title": title, "link": link, "source": source, "date": d.astimezone(timezone.utc).isoformat(timespec="minutes"),
-                         "summary": summary, "image": it.get("image", "") if (it.get("image") or "").startswith("https://") else ""})
+                         "summary": summary, "image": it.get("image", "") if (it.get("image") or "").startswith("https://") else "", "site": site})
         kept.sort(key=lambda x: x["date"], reverse=True)
         kept = kept[: f.get("max", 3)]
         print(f"OK    {f['name']:<30} {len(raw):>3} found, {len(kept)} kept   {used[:90]}")
         items += kept
     items.sort(key=lambda x: x["date"], reverse=True)
     items = items[:MAX_ITEMS]
+    site_img = {}
     for it in items:
-        if not it["image"]: it["image"] = og_image(it["link"])
+        site = it.pop("site", "")
+        if not it["image"]: it["image"] = og_image(it["link"])          # the article's own image
+        if not it["image"] and site.startswith("https://"):              # Google News: the publisher's site image
+            if site not in site_img: site_img[site] = og_image(site, first=False)
+            it["image"] = site_img[site]
+            if it["image"]: it["img_from"] = "site"
+        if it["image"]: it["credit"] = it["source"]
         if it["image"] and not check:
             local = cache_image(it["image"])
             if local: it["image"] = local
