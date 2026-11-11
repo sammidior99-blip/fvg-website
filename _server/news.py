@@ -15,6 +15,7 @@ UA = "Mozilla/5.0 (compatible; FVG-InsightsBot/1.0; +https://summitbrilliance.co
 MAX_ITEMS, MAX_AGE_DAYS = 80, 45
 KEYWORDS = {
  "uni": r"student|undergrad|graduate|admission|scholarship|career|job|employ|alumni|commencement|education|learning|teaching|campus|internship|young|youth|future of work|skills|AI\b|artificial intelligence|degree|course|summer|visa|international|ranking|QS\b|study abroad|tuition|fees|enrol|applicant",
+"people": r"Jamie Dimon|Dimon\b|Jensen Huang|Nvidia CEO|Elon Musk|Musk\b|Donald Trump|Trump\b|Sam Altman|Satya Nadella|Tim Cook|Warren Buffett|Mark Zuckerberg",
  "talks": r"career|work|job|learn|education|student|young|youth|gen z|future|leader|success|skill|purpose|school|college|universit|graduate|mentor|confidence|ambition|AI\b|artificial intelligence|habit|focus|motivation|decision",
 }
 NS = {"a": "http://www.w3.org/2005/Atom", "media": "http://search.yahoo.com/mrss/", "content": "http://purl.org/rss/1.0/modules/content/"}
