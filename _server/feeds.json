@@ -15,72 +15,9 @@
       "max": 2
     },
     {
-      "name": "Stanford Report",
-      "cat": "uni",
-      "url": "https://news.stanford.edu/",
-      "filter": true,
-      "max": 2
-    },
-    {
-      "name": "University of Oxford",
-      "cat": "uni",
-      "url": "https://www.ox.ac.uk/news-listing",
-      "filter": true,
-      "max": 2
-    },
-    {
-      "name": "University of Cambridge",
-      "cat": "uni",
-      "url": "https://www.cam.ac.uk/news",
-      "filter": true,
-      "max": 2
-    },
-    {
-      "name": "Imperial College London",
-      "cat": "uni",
-      "url": "https://www.imperial.ac.uk/news/",
-      "filter": true,
-      "max": 2
-    },
-    {
-      "name": "UCL",
-      "cat": "uni",
-      "url": "https://www.ucl.ac.uk/news/",
-      "filter": true,
-      "max": 2
-    },
-    {
       "name": "Yale News",
       "cat": "uni",
       "url": "https://news.yale.edu/news-rss",
-      "filter": true,
-      "max": 2
-    },
-    {
-      "name": "Princeton University",
-      "cat": "uni",
-      "url": "https://www.princeton.edu/news",
-      "filter": true,
-      "max": 2
-    },
-    {
-      "name": "Columbia University",
-      "cat": "uni",
-      "url": "https://news.columbia.edu/",
-      "filter": true,
-      "max": 2
-    },
-    {
-      "name": "Penn Today",
-      "cat": "uni",
-      "url": "https://penntoday.upenn.edu/",
-      "filter": true,
-      "max": 2
-    },
-    {
-      "name": "Cornell Chronicle",
-      "cat": "uni",
-      "url": "https://news.cornell.edu/",
       "filter": true,
       "max": 2
     },
@@ -90,34 +27,6 @@
       "url": "https://news.berkeley.edu/feed/",
       "filter": true,
       "max": 2
-    },
-    {
-      "name": "NUS News",
-      "cat": "uni",
-      "url": "https://news.nus.edu.sg/",
-      "filter": true,
-      "max": 2
-    },
-    {
-      "name": "The University of Hong Kong",
-      "cat": "uni",
-      "url": "https://www.hku.hk/press/",
-      "filter": true,
-      "max": 2
-    },
-    {
-      "name": "University of Toronto",
-      "cat": "uni",
-      "url": "https://www.utoronto.ca/news",
-      "filter": true,
-      "max": 2
-    },
-    {
-      "name": "Times Higher Education",
-      "cat": "uni",
-      "url": "https://www.timeshighereducation.com/news",
-      "filter": true,
-      "max": 3
     },
     {
       "name": "The PIE News",
@@ -139,6 +48,34 @@
       "url": "https://news.google.com/rss/search?q=%22QS%20World%20University%20Rankings%22%20when:30d&hl=en-GB&gl=GB&ceid=GB:en",
       "filter": false,
       "max": 2
+    },
+    {
+      "name": "Google News",
+      "cat": "uni",
+      "url": "https://news.google.com/rss/search?q=%28%22University%20of%20Oxford%22%20OR%20%22University%20of%20Cambridge%22%20OR%20%22Imperial%20College%20London%22%20OR%20UCL%29%20%28students%20OR%20admissions%20OR%20scholarship%20OR%20%22international%20students%22%20OR%20graduates%29%20when%3A14d&hl=en-GB&gl=GB&ceid=GB:en",
+      "filter": false,
+      "max": 3
+    },
+    {
+      "name": "Google News",
+      "cat": "uni",
+      "url": "https://news.google.com/rss/search?q=%28%22Stanford%20University%22%20OR%20%22Princeton%20University%22%20OR%20%22Columbia%20University%22%20OR%20%22University%20of%20Pennsylvania%22%20OR%20%22Cornell%20University%22%29%20%28students%20OR%20admissions%20OR%20scholarship%20OR%20%22international%20students%22%20OR%20graduates%29%20when%3A14d&hl=en-US&gl=US&ceid=US:en",
+      "filter": false,
+      "max": 3
+    },
+    {
+      "name": "Google News",
+      "cat": "uni",
+      "url": "https://news.google.com/rss/search?q=%28%22National%20University%20of%20Singapore%22%20OR%20%22University%20of%20Hong%20Kong%22%20OR%20%22University%20of%20Toronto%22%29%20%28students%20OR%20admissions%20OR%20scholarship%20OR%20%22international%20students%22%20OR%20graduates%29%20when%3A14d&hl=en-GB&gl=GB&ceid=GB:en",
+      "filter": false,
+      "max": 3
+    },
+    {
+      "name": "Google News",
+      "cat": "uni",
+      "url": "https://news.google.com/rss/search?q=site%3Atimeshighereducation.com%20when%3A14d&hl=en-GB&gl=GB&ceid=GB:en",
+      "filter": false,
+      "max": 3
     },
     {
       "name": "BBC News",
@@ -186,7 +123,7 @@
       "kw": "people",
       "url": "https://fortune.com/feed/",
       "filter": true,
-      "max": 4
+      "max": 3
     },
     {
       "name": "CNBC",
@@ -194,7 +131,7 @@
       "kw": "people",
       "url": "https://www.cnbc.com/id/100003114/device/rss/rss.html",
       "filter": true,
-      "max": 3
+      "max": 2
     },
     {
       "name": "CNBC",
@@ -202,7 +139,7 @@
       "kw": "people",
       "url": "https://www.cnbc.com/id/10001147/device/rss/rss.html",
       "filter": true,
-      "max": 3
+      "max": 2
     },
     {
       "name": "Business Insider",
@@ -210,36 +147,28 @@
       "kw": "people",
       "url": "https://feeds.businessinsider.com/custom/all",
       "filter": true,
-      "max": 4
-    },
-    {
-      "name": "BBC News",
-      "cat": "leaders",
-      "kw": "people",
-      "url": "https://feeds.bbci.co.uk/news/business/rss.xml",
-      "filter": true,
-      "max": 2
+      "max": 3
     },
     {
       "name": "Google News",
       "cat": "leaders",
       "url": "https://news.google.com/rss/search?q=%22Jensen%20Huang%22%20interview%20when:14d&hl=en-US&gl=US&ceid=US:en",
       "filter": false,
-      "max": 3
+      "max": 2
     },
     {
       "name": "Google News",
       "cat": "leaders",
       "url": "https://news.google.com/rss/search?q=%22Elon%20Musk%22%20interview%20when:14d&hl=en-US&gl=US&ceid=US:en",
       "filter": false,
-      "max": 3
+      "max": 2
     },
     {
       "name": "Google News",
       "cat": "leaders",
       "url": "https://news.google.com/rss/search?q=Trump%20interview%20when:7d&hl=en-US&gl=US&ceid=US:en",
       "filter": false,
-      "max": 3
+      "max": 2
     },
     {
       "name": "Google News",
@@ -253,7 +182,7 @@
       "cat": "leaders",
       "url": "https://news.google.com/rss/search?q=CEO%20interview%20(%22Gen%20Z%22%20OR%20graduates%20OR%20%22young%20people%22)%20when:14d&hl=en-US&gl=US&ceid=US:en",
       "filter": false,
-      "max": 3
+      "max": 2
     },
     {
       "name": "TED",
@@ -261,7 +190,7 @@
       "kw": "talks",
       "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UCAuUUnT6oDeKwE6v1NGQxug",
       "filter": true,
-      "max": 3
+      "max": 2
     }
   ]
 }
