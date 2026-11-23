@@ -1,6 +1,6 @@
 from django.urls import path, re_path
 
-from . import security_views, views
+from . import booking, security_views, views
 
 urlpatterns = [
     re_path(r"^s/(?P<code>[A-Za-z0-9-]+)/?$", views.go, name="consultant-go"),
@@ -8,4 +8,5 @@ urlpatterns = [
     path("admin/2fa/", security_views.setup, name="two-factor-setup"),
     path("admin/2fa/verify/", security_views.verify, name="two-factor-verify"),
     path("api/consultant.json", views.api, name="consultant-api"),
+    path("api/booking", booking.booking, name="consultant-booking"),
 ]
