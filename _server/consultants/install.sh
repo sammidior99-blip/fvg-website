@@ -26,8 +26,8 @@ echo "1/7 backup to $BK"
 mkdir -p "$BK" && cp -a "$M/db.sqlite3" "$M/mysite/settings.py" "$M/mysite/urls.py" "$BK/" || { echo "backup failed - nothing was changed"; exit 1; }
 [ -d "$M/consultants" ] && cp -a "$M/consultants" "$BK/"
 
-echo "2/7 QR-code library"
-"$M/venv/bin/pip" install -q --disable-pip-version-check segno || restore "pip install segno"
+echo "2/7 libraries (QR codes, Excel export)"
+"$M/venv/bin/pip" install -q --disable-pip-version-check segno openpyxl || restore "pip install segno openpyxl"
 
 echo "3/7 add-on code"
 rm -rf "$M/consultants" && cp -r "$SRC/app" "$M/consultants" && chown -R "$OWNER": "$M/consultants" || restore "copy code"
