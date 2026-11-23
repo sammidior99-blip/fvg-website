@@ -18,7 +18,7 @@
         return;
       }
       var t = cfg.title.replace('{grade}', cfg.labels.grade[v.grade]).replace('{dest}', cfg.labels.dest[v.dest]);
-      var p = cfg.dest[v.dest] + ' ' + cfg.base[v.base] + ' ' + cfg.tail;
+      var sp = k === 'en' ? ' ' : ''; var p = cfg.dest[v.dest] + sp + cfg.base[v.base] + sp + cfg.tail;
       title.textContent = t; text.textContent = p;
       (cfg.focus[v.grade] || []).forEach(function (f) { var li = document.createElement('li'); li.textContent = f; chips.appendChild(li); });
       if (link) link.setAttribute('href', base + (base.indexOf('?') < 0 ? '?' : '&') + 'check=' +
