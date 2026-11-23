@@ -7,11 +7,11 @@ from django.contrib.auth.password_validation import validate_password
 from django.db.models import Count
 from django.utils.html import format_html, format_html_join
 
-from .models import Consultant, Referral
+from .models import PROTECT_DAYS, Consultant, LeadReport, Referral
 
 SITE = "https://summitbrilliance.com"
 GROUP = "銷售顧問"
-GROUP_PERMS = ["view_referral", "change_referral", "view_consultant", "change_consultant"]
+GROUP_PERMS = ["view_referral", "change_referral", "add_referral", "view_consultant", "change_consultant", "view_leadreport"]
 
 
 def own(request):
@@ -150,88 +150,233 @@ class ConsultantAdmin(admin.ModelAdmin):
                            '<a href="/s/{0}/link-qr.png?download=1">下載二維碼 PNG</a>', obj.code)
 
 
-# ================================================================ customer follow-up
+# ================================================================ lead registration (客戶報備)
+from django.contrib import messages  # noqa: E402
+from django.template.response import TemplateResponse  # noqa: E402
+from django.utils import timezone  # noqa: E402
+
+from . import leads as L  # noqa: E402
+
 ENQ_FIELDS = [("created_at", "提交時間"), ("language", "語言"), ("parent_name", "家長／監護人"), ("student_name", "學生"),
               ("phone", "電話"), ("email", "電郵"), ("school", "就讀學校"), ("grade", "年級"), ("service", "感興趣的服務"),
               ("channel", "偏好聯絡方式"), ("message", "留言")]
+FOLLOW_FIELDS = {"status", "next_date", "notes", "signed_date", "product", "amount"}
+
+
+class LeadForm(forms.ModelForm):
+    id_last4 = forms.CharField(label="身份證最後四位", max_length=30, required=False,
+                               help_text="填最後 4 個字就得（亦可貼上完整號碼，系統只會保留最後 4 個字）；用嚟分辨同名同姓，可留空")
+
+    class Meta:
+        model = Referral
+        fields = "__all__"
+
+    def __init__(self, *a, request=None, **k):
+        super().__init__(*a, **k)
+        self.request = request
+        if "status" in self.fields:  # 已釋放 is set by the system only
+            self.fields["status"].choices = [c for c in self.fields["status"].choices if c[0] != "released"]
+        if "consultant" in self.fields:
+            self.fields["consultant"].queryset = Consultant.objects.filter(active=True)
+            self.fields["consultant"].help_text = "留空 = 未分派"
+        for f in ("student_name", "phone"):
+            if f in self.fields: self.fields[f].required = True
+
+    def clean_id_last4(self):
+        v = L.norm_id(self.cleaned_data.get("id_last4"))
+        if v and len(v) != 4: raise forms.ValidationError("請填身份證號碼最後 4 個字（數字或字母）。")
+        return v
+
+    def clean(self):
+        d = super().clean()
+        if d.get("status") == "signed" and not d.get("signed_date"):
+            d["signed_date"] = timezone.localdate(); self.cleaned_data["signed_date"] = d["signed_date"]
+        mine = Consultant.objects.filter(user=self.request.user).first() if not self.request.user.is_superuser else d.get("consultant")
+        self.claims, self.releases = [], []
+        for m in L.matches(d.get("student_name"), d.get("gender"), d.get("phone"), d.get("id_last4"), exclude_pk=self.instance.pk):
+            if m.is_protected():
+                if mine and m.consultant_id == mine.pk:
+                    raise forms.ValidationError(f"你已經喺 {timezone.localtime(m.created_at):%Y-%m-%d} 報備過呢位服務對象，請喺「客戶報備」名單入面更新佢嘅進度。")
+                u = m.protected_until()
+                until = "（已簽約，永久保護）" if u == "permanent" else f"，保護期至 {u:%Y-%m-%d}"
+                who = f"{m.consultant.name_zh}（{m.consultant.code}）" if self.request.user.is_superuser else "其他顧問"
+                raise forms.ValidationError(f"報備不成功：呢位服務對象已由{who}於 {timezone.localtime(m.created_at):%Y-%m-%d} 報備{until}。以第一個報備為準。")
+            (self.claims if not m.consultant_id else self.releases).append(m)
+        return d
+
+
+class ProtectionFilter(admin.SimpleListFilter):
+    title, parameter_name = "保護狀態", "prot"
+
+    def lookups(self, request, model_admin): return (("on", "保護中"), ("off", "已過期／未分派"))
+
+    def queryset(self, request, qs):
+        if self.value() not in ("on", "off"): return qs
+        ids = [r.pk for r in qs if r.is_protected() == (self.value() == "on")]
+        return qs.filter(pk__in=ids)
+
+
+class DueFilter(admin.SimpleListFilter):
+    title, parameter_name = "跟進提醒", "due"
+
+    def lookups(self, request, model_admin): return (("due", "今日或之前要跟進"),)
+
+    def queryset(self, request, qs):
+        return qs.filter(next_date__lte=timezone.localdate()).exclude(status__in=["signed", "closed", "released"]) if self.value() == "due" else qs
 
 
 @admin.register(Referral)
-class ReferralAdmin(admin.ModelAdmin):
-    list_display = ("when", "who", "student", "contact", "service", "consultant", "status", "next_date", "source")
-    list_display_links = ("when", "who")
-    list_filter = ("status", "consultant", "source")
+class LeadAdmin(admin.ModelAdmin):
+    form = LeadForm
+    list_display = ("reg_date", "student_name", "gender", "phone", "coop", "consultant", "status", "next_date", "protection")
+    list_display_links = ("reg_date", "student_name")
+    list_filter = ("status", DueFilter, "coop_type", "consultant", ProtectionFilter, "source")
+    search_fields = ("student_name", "parent_name", "phone", "wechat", "email", "coop_name", "notes")
     date_hierarchy = "created_at"
-    search_fields = ("notes",)
+
+    def get_form(self, request, obj=None, **kw):
+        Form = super().get_form(request, obj, **kw)
+
+        class F(Form):
+            def __init__(s, *a, **k): super().__init__(*a, request=request, **k)
+        return F
 
     def get_queryset(self, request):
         qs = super().get_queryset(request).select_related("consultant")
         if request.user.is_superuser: return qs
         c = own(request)
-        return qs.filter(consultant=c) if c else qs.none()
+        return qs.filter(consultant=c).exclude(status="released") if c else qs.none()
 
     def get_list_display(self, request):
         if request.user.is_superuser: return self.list_display
-        return ("when", "who", "student", "contact", "service", "status", "next_date")
+        return tuple(x for x in self.list_display if x != "consultant")
 
     def get_list_filter(self, request):
-        return self.list_filter if request.user.is_superuser else ("status",)
+        return self.list_filter if request.user.is_superuser else ("status", DueFilter, "coop_type", ProtectionFilter)
 
-    def get_fields(self, request, obj=None):
-        f = ["details", "status", "next_date", "notes"]
-        return (["consultant"] + f + ["source", "created_at", "updated_at"]) if request.user.is_superuser else f + ["updated_at"]
+    def get_fieldsets(self, request, obj=None):
+        fs = [("服務對象（學生）", {"fields": ("student_name", "gender", "id_last4", "grade", "school")}),
+              ("客戶（家長）", {"fields": ("parent_name", "phone", "wechat", "email", "interest")}),
+              ("來源", {"fields": ("coop_type", "coop_name")}),
+              ("跟進", {"fields": ("status", "next_date", "notes")}),
+              ("成交", {"fields": ("signed_date", "product", "amount", "currency")})]
+        if obj and obj.enquiry_ids.strip(","): fs.insert(0, ("官網查詢內容", {"fields": ("details",)}))
+        info = ["protection", "created_at", "last_activity"] + (["source", "code"] if request.user.is_superuser else [])
+        if request.user.is_superuser: fs.insert(0, ("報備顧問", {"fields": ("consultant",)}))
+        if obj: fs.append(("報備資料", {"fields": info}))
+        return fs
 
     def get_readonly_fields(self, request, obj=None):
-        return ("details", "source", "created_at", "updated_at")
+        return ("details", "protection", "created_at", "last_activity", "source", "code")
 
-    def has_add_permission(self, request): return False
     def has_delete_permission(self, request, obj=None): return request.user.is_superuser
 
     def save_model(self, request, obj, form, change):
+        if not change:
+            if not request.user.is_superuser: obj.consultant = own(request)
+            obj.source = "manual"
+        if not change or FOLLOW_FIELDS & set(form.changed_data) or "consultant" in form.changed_data:
+            obj.last_activity = timezone.now()
+        for m in getattr(form, "claims", []):  # an unassigned website enquiry of the same student: merge it in
+            for pk in m.enquiry_list(): obj.add_enquiry(pk)
+            if m.notes and m.notes not in obj.notes: obj.notes = (obj.notes + "\n" + m.notes).strip()
         super().save_model(request, obj, form, change)
+        for m in getattr(form, "claims", []): m.delete()
+        by = obj.consultant.name_zh if obj.consultant else "公司"
+        for m in getattr(form, "releases", []): L.release(m, by)
+        sib = L.siblings(obj.phone, obj.student_name, exclude_pk=obj.pk)
+        if sib and not change:
+            messages.info(request, "提示：同一電話已報備咗其他服務對象（例如兄弟姊妹）：" + "、".join(s.student_name or "—" for s in sib[:5]))
         E = enquiry_model()
-        if E and hasattr(E, "followed_up"):  # keep the company's enquiry list in step
-            E._base_manager.filter(pk=obj.enquiry_id).update(followed_up=obj.status != "new")
+        if E and hasattr(E, "followed_up") and obj.enquiry_list():
+            E._base_manager.filter(pk__in=obj.enquiry_list()).update(followed_up=obj.status not in ("new",))
 
-    # ---- details of the enquiry itself (read from pages.Enquiry)
-    def _enq(self, obj):
-        E = enquiry_model()
-        if not E: return None
-        if getattr(self, "_cache", (None,))[0] is not obj:
-            self._cache = (obj, E._base_manager.filter(pk=obj.enquiry_id).first())
-        return self._cache[1]
+    @admin.display(description="報備時間", ordering="created_at")
+    def reg_date(self, obj): return timezone.localtime(obj.created_at).strftime("%Y-%m-%d")
 
-    def _get(self, obj, f):
-        e = self._enq(obj)
-        if e is None: return ""
-        disp = getattr(e, f"get_{f}_display", None)
-        return disp() if disp else (getattr(e, f, "") or "")
+    @admin.display(description="合作方式", ordering="coop_type")
+    def coop(self, obj):
+        return obj.get_coop_type_display() + (f"：{obj.coop_name}" if obj.coop_name else "")
 
-    @admin.display(description="提交時間", ordering="created_at")
-    def when(self, obj):
-        v = self._get(obj, "created_at") or obj.created_at
-        return v.strftime("%Y-%m-%d %H:%M")
+    @admin.display(description="保護狀態")
+    def protection(self, obj):
+        if not obj.pk: return "儲存後開始計算"
+        if not obj.consultant_id: return "未分派"
+        u = obj.protected_until()
+        if u == "permanent": return "永久（已簽約）"
+        if u and u >= timezone.localdate(): return f"保護至 {u:%Y-%m-%d}"
+        return "已過期"
 
-    @admin.display(description="家長／稱呼")
-    def who(self, obj):
-        return self._get(obj, "parent_name") or ("（查詢已刪除）" if self._enq(obj) is None else "—")
-
-    @admin.display(description="學生")
-    def student(self, obj): return self._get(obj, "student_name")
-
-    @admin.display(description="聯絡方式")
-    def contact(self, obj):
-        return " / ".join(x for x in (self._get(obj, "phone"), self._get(obj, "email")) if x)
-
-    @admin.display(description="感興趣的服務")
-    def service(self, obj): return self._get(obj, "service")
-
-    @admin.display(description="客戶查詢內容")
+    @admin.display(description="官網查詢內容")
     def details(self, obj):
-        e = self._enq(obj)
-        if e is None: return "呢個查詢已被刪除。"
-        rows = [(label, self._get(obj, f)) for f, label in ENQ_FIELDS if hasattr(e, f)]
-        rows = [(k, v.strftime("%Y-%m-%d %H:%M") if hasattr(v, "strftime") else v) for k, v in rows]
-        return format_html('<table style="border-collapse:collapse">{}</table>', format_html_join("",
-            '<tr><th style="text-align:left;padding:4px 16px 4px 0;white-space:nowrap;vertical-align:top">{}</th>'
-            '<td style="padding:4px 0;white-space:pre-wrap">{}</td></tr>', rows))
+        E = enquiry_model()
+        if not E or not obj.enquiry_list(): return "—"
+        parts = []
+        for e in E._base_manager.filter(pk__in=obj.enquiry_list()).order_by("pk"):
+            rows = []
+            for f, label in ENQ_FIELDS:
+                if not hasattr(e, f): continue
+                v = getattr(e, f"get_{f}_display")() if hasattr(e, f"get_{f}_display") else (getattr(e, f) or "")
+                rows.append((label, timezone.localtime(v).strftime("%Y-%m-%d %H:%M") if hasattr(v, "astimezone") else v))
+            parts.append(format_html('<p style="margin:8px 0 4px;font-weight:700">查詢 #{}</p><table style="border-collapse:collapse">{}</table>', e.pk,
+                format_html_join("", '<tr><th style="text-align:left;padding:3px 16px 3px 0;white-space:nowrap;vertical-align:top">{}</th>'
+                                     '<td style="padding:3px 0;white-space:pre-wrap">{}</td></tr>', rows)))
+        return format_html_join("", "{}", ((p,) for p in parts)) if parts else "—"
+
+
+# ================================================================ results summary (業績總覽)
+PERIODS = [("month", "本月"), ("quarter", "今季"), ("year", "今年"), ("all", "全部")]
+
+
+def period_start(p):
+    t = timezone.localdate()
+    if p == "month": return t.replace(day=1)
+    if p == "quarter": return t.replace(month=(t.month - 1) // 3 * 3 + 1, day=1)
+    if p == "year": return t.replace(month=1, day=1)
+    return None
+
+
+def summarise(rows):
+    """Counts per status, deals and amounts for a list of leads."""
+    today = timezone.localdate()
+    s = {"total": len(rows), "by": {k: 0 for k, _ in Referral._meta.get_field("status").choices}, "protected": 0, "due": 0, "amounts": {}}
+    for r in rows:
+        s["by"][r.status] = s["by"].get(r.status, 0) + 1
+        if r.is_protected(today): s["protected"] += 1
+        if r.next_date and r.next_date <= today and r.status not in ("signed", "closed", "released"): s["due"] += 1
+        if r.status == "signed" and r.amount: s["amounts"][r.currency] = s["amounts"].get(r.currency, 0) + r.amount
+    active = s["total"] - s["by"].get("released", 0)
+    s["signed"] = s["by"].get("signed", 0)
+    s["rate"] = f"{s['signed'] * 100 / active:.0f}%" if active else "—"
+    s["amount_text"] = "、".join(f"{c} {v:,.0f}" for c, v in sorted(s["amounts"].items())) or "—"
+    return s
+
+
+@admin.register(LeadReport)
+class LeadReportAdmin(admin.ModelAdmin):
+    def has_add_permission(self, request): return False
+    def has_change_permission(self, request, obj=None): return False
+    def has_delete_permission(self, request, obj=None): return False
+
+    def changelist_view(self, request, extra_context=None):
+        p = request.GET.get("p") if request.GET.get("p") in dict(PERIODS) else "year"
+        qs = Referral.objects.select_related("consultant")
+        start = period_start(p)
+        if start: qs = qs.filter(created_at__date__gte=start)
+        c = own(request)
+        if not request.user.is_superuser: qs = qs.filter(consultant=c) if c else qs.none()
+        rows = list(qs)
+        statuses = [(k, v) for k, v in Referral._meta.get_field("status").choices if k != "released"]
+
+        def group(key, label):
+            g = {}
+            for r in rows: g.setdefault(key(r), []).append(r)
+            return sorted(((label(k), summarise(v)) for k, v in g.items()), key=lambda x: -x[1]["total"])
+        coop_label = dict(Referral._meta.get_field("coop_type").choices)
+        ctx = {**self.admin_site.each_context(request), "title": "業績總覽", "opts": self.model._meta,
+               "periods": PERIODS, "p": p, "statuses": statuses, "total": summarise(rows),
+               "by_consultant": group(lambda r: r.consultant, lambda k: f"{k.name_zh}（{k.code}）" if k else "未分派"),
+               "by_coop": group(lambda r: r.coop_type, lambda k: coop_label.get(k, k)),
+               "by_partner": [x for x in group(lambda r: (r.coop_type, r.coop_name.strip()), lambda k: f"{coop_label.get(k[0], k[0])}：{k[1]}") if not x[0].endswith("：")][:30],
+               "is_boss": request.user.is_superuser, "protect_days": PROTECT_DAYS}
+        return TemplateResponse(request, "admin/consultants/report.html", ctx)

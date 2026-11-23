@@ -13,13 +13,16 @@ class ConsultantsConfig(AppConfig):
         from .views import COOKIE, find
 
         def remember(sender, instance, created, **kw):
-            """A new booking-form enquiry: note which consultant's link the visitor came through."""
+            """A new website booking form: register the student automatically (and credit the consultant whose link was used)."""
+            if not created: return
             req = current_request()
-            if not created or req is None: return
-            code = req.COOKIES.get(COOKIE)
-            if code:
-                from .models import Referral
-                Referral.objects.get_or_create(enquiry_id=instance.pk, defaults={"consultant": find(code), "code": code})
+            code = req.COOKIES.get(COOKIE, "") if req is not None else ""
+            from .leads import from_enquiry
+            try:
+                from_enquiry(instance, find(code) if code else None, code)
+            except Exception:  # never let this break the customer's form
+                import logging
+                logging.getLogger(__name__).exception("lead registration failed for enquiry %s", instance.pk)
 
         try:
             post_save.connect(remember, sender=apps.get_model("pages", "Enquiry"), weak=False, dispatch_uid="consultant-referral")
@@ -33,19 +36,23 @@ class ConsultantsConfig(AppConfig):
 
     @staticmethod
     def _extend_enquiry_admin(Enquiry):
-        """In the company's existing enquiry list: a 負責顧問 / 進度 column, and actions to assign the ticked
+        """In the company's existing enquiry list: a 報備顧問 / 進度 column, and actions to assign the ticked
         enquiries (e.g. from visitors who came without a consultant's link) to a consultant."""
         from django.contrib import admin, messages
+        from django.utils import timezone
         from .models import Consultant, Referral
         ma = admin.site._registry.get(Enquiry)
         if not ma or getattr(ma, "_consultants_extended", False): return
         ma._consultants_extended = True
 
+        def lead_of(e):
+            return Referral.objects.filter(enquiry_ids__contains=f",{e.pk},").select_related("consultant").first()
+
         def consultant_col(obj):
-            r = Referral.objects.filter(enquiry_id=obj.pk).select_related("consultant").first()
-            if not r: return "—（未分派）"
-            return f"{r.consultant.name_zh if r.consultant else r.code} · {r.get_status_display()}"
-        consultant_col.short_description = "負責顧問 / 進度"
+            r = lead_of(obj)
+            if not r or not r.consultant: return "—（未分派）"
+            return f"{r.consultant.name_zh} · {r.get_status_display()}"
+        consultant_col.short_description = "報備顧問 / 進度"
         ma.list_display = tuple(ma.list_display) + (consultant_col,)
 
         original = ma.get_actions
@@ -53,19 +60,27 @@ class ConsultantsConfig(AppConfig):
         def get_actions(request):
             actions = original(request)
             if not request.user.is_superuser: return actions
+            from .leads import from_enquiry, note
             for c in Consultant.objects.filter(active=True).order_by("code"):
                 def assign(modeladmin, req, queryset, c=c):
                     for e in queryset:
-                        r, made = Referral.objects.get_or_create(enquiry_id=e.pk, defaults={"consultant": c, "code": c.code, "source": "assigned"})
-                        if not made and r.consultant_id != c.pk:
-                            r.consultant, r.code, r.source = c, c.code, "assigned"
-                            r.save(update_fields=["consultant", "code", "source", "updated_at"])
+                        r = lead_of(e) or from_enquiry(e)
+                        if r.consultant_id != c.pk:
+                            note(r, f"公司分派給 {c.name_zh}（{c.code}）。")
+                            r.consultant, r.code, r.source, r.last_activity = c, c.code, "assigned", timezone.now()
+                            r.save()
                     modeladmin.message_user(req, f"已將 {queryset.count()} 個查詢分派給 {c.name_zh}（{c.code}）。", messages.SUCCESS)
                 name = f"assign_consultant_{c.pk}"
                 actions[name] = (assign, name, f"分派給顧問：{c.name_zh}（{c.code}）".replace("%", "%%"))
 
             def unassign(modeladmin, req, queryset):
-                n, _ = Referral.objects.filter(enquiry_id__in=[e.pk for e in queryset]).delete()
+                n = 0
+                for e in queryset:
+                    r = lead_of(e)
+                    if r and r.consultant_id:
+                        note(r, "公司取消分派。")
+                        r.consultant, r.source = None, "website"
+                        r.save(); n += 1
                 modeladmin.message_user(req, f"已取消 {n} 個查詢嘅顧問分派。", messages.SUCCESS)
             actions["unassign_consultant"] = (unassign, "unassign_consultant", "取消顧問分派")
             return actions

@@ -39,6 +39,7 @@ mkdir -p /var/www/consultant-media/photos /var/www/consultant-media/wechat && ch
 
 echo "6/7 database"
 cd "$M" && sudo -u "$OWNER" "$PY" manage.py migrate consultants --noinput || restore "migrate"
+sudo -u "$OWNER" "$PY" manage.py sync_leads || restore "register existing enquiries"
 sudo -u "$OWNER" "$PY" manage.py check 2>&1 | tail -1
 
 echo "7/7 restart + nginx"

@@ -68,32 +68,83 @@ class Consultant(models.Model):
         return "".join(ch for ch in (self.whatsapp or self.phone) if ch.isdigit())
 
 
-STATUS = [("new", "新查詢"), ("contacted", "已聯絡"), ("meeting", "已安排會談"), ("proposal", "已提交方案"),
-          ("signed", "已簽約"), ("closed", "暫不跟進")]
+STATUS = [("new", "新報備"), ("contacted", "已聯絡"), ("meeting", "已安排會談"), ("proposal", "已提交方案"),
+          ("signed", "已簽約"), ("closed", "暫不跟進"), ("released", "已釋放（由他人重新報備）")]
+COOP = [("direct", "官網／直接客戶"), ("channel", "渠道合作"), ("push", "客戶推進"), ("referral", "客戶推薦"), ("branch", "分公司")]
+SOURCE = [("website", "官網表格"), ("manual", "顧問錄入"), ("link", "顧問連結"), ("assigned", "公司分派")]
+GENDER = [("M", "男"), ("F", "女")]
+PRODUCTS = [("ug", "本科升學全案"), ("pg", "研究生升學全案"), ("hs", "海外高中入學全案"), ("dual", "國內美高升學全案"),
+            ("camp", "名校研學營"), ("research", "世界名校教授科研項目"), ("online", "線上美國高中"),
+            ("growth", "國際化成長規劃"), ("identity", "身份與全球流動性"), ("other", "其他")]
+CURRENCY = [("HKD", "港元 HKD"), ("CNY", "人民幣 CNY"), ("USD", "美元 USD")]
+PROTECT_DAYS = getattr(settings, "LEAD_PROTECT_DAYS", 90)
 
 
 class Referral(models.Model):
-    """A booking-form enquiry handled by a consultant (came through their link, or assigned by the company),
-    with the consultant's follow-up progress. pages.Enquiry itself is left untouched."""
-    enquiry_id = models.IntegerField("查詢編號", unique=True)
-    consultant = models.ForeignKey(Consultant, verbose_name="負責顧問", null=True, on_delete=models.SET_NULL, related_name="referrals")
+    """One registered 服務對象 (the student being served) and the consultant who registered it first.
+    Entered automatically from the website booking form, or by a consultant. A parent can have several children:
+    each child is its own record. pages.Enquiry itself is left untouched."""
+    consultant = models.ForeignKey(Consultant, verbose_name="報備顧問", null=True, blank=True, on_delete=models.SET_NULL, related_name="referrals")
+    # the student being served
+    student_name = models.CharField("服務對象姓名", max_length=100, default="", blank=True)
+    gender = models.CharField("性別", max_length=1, choices=GENDER, blank=True)
+    id_last4 = models.CharField("身份證最後四位", max_length=4, blank=True, help_text="用嚟分辨同名同姓；可留空")
+    grade = models.CharField("年級", max_length=50, blank=True)
+    school = models.CharField("就讀學校", max_length=150, blank=True)
+    # the client (usually a parent)
+    parent_name = models.CharField("客戶／家長姓名", max_length=100, blank=True)
+    phone = models.CharField("電話", max_length=40, blank=True, help_text="連國家碼，例如 +852 9123 4567")
+    wechat = models.CharField("微信號", max_length=60, blank=True)
+    email = models.EmailField("電郵", blank=True)
+    interest = models.CharField("感興趣的服務", max_length=200, blank=True)
+    # where the client came from
+    coop_type = models.CharField("合作方式", max_length=10, choices=COOP, default="direct")
+    coop_name = models.CharField("合作方名稱", max_length=150, blank=True, help_text="例如渠道公司名稱、分公司名稱、推薦人姓名")
+    source = models.CharField("錄入方式", max_length=10, choices=SOURCE, default="website")
     code = models.CharField("連結代號", max_length=40, blank=True)
-    source = models.CharField("來源", max_length=10, choices=[("link", "顧問連結"), ("assigned", "公司分派")], default="link")
+    enquiry_ids = models.CharField("官網查詢編號", max_length=200, blank=True, help_text="內部使用")
+    # follow-up
     status = models.CharField("進度", max_length=10, choices=STATUS, default="new")
     next_date = models.DateField("下次跟進日期", null=True, blank=True)
     notes = models.TextField("跟進備註", blank=True, help_text="例如：已 WhatsApp 聯絡，家長想了解英國本科，約咗下星期三見面。")
-    created_at = models.DateTimeField("時間", auto_now_add=True)
+    last_activity = models.DateTimeField("最後跟進", null=True, blank=True)
+    # deal
+    signed_date = models.DateField("簽約日期", null=True, blank=True)
+    product = models.CharField("簽約產品", max_length=10, choices=PRODUCTS, blank=True)
+    amount = models.DecimalField("合約金額", max_digits=12, decimal_places=2, null=True, blank=True)
+    currency = models.CharField("貨幣", max_length=3, choices=CURRENCY, default="HKD")
+    created_at = models.DateTimeField("報備時間", auto_now_add=True)
     updated_at = models.DateTimeField("最後更新", auto_now=True)
 
     class Meta:
-        verbose_name = verbose_name_plural = "客戶跟進"
+        verbose_name = verbose_name_plural = "客戶報備"
         ordering = ["-created_at"]
 
     def __str__(self):
-        from django.apps import apps
-        try:
-            e = apps.get_model("pages", "Enquiry")._base_manager.filter(pk=self.enquiry_id).first()
-        except LookupError:
-            e = None
-        name = (getattr(e, "parent_name", "") or getattr(e, "student_name", "")) if e else ""
-        return f"{name or '客戶'}（查詢 #{self.enquiry_id}）"
+        return f"{self.student_name or self.parent_name or '客戶'}（{self.parent_name or self.phone or '—'}）"
+
+    def enquiry_list(self):
+        return [int(x) for x in self.enquiry_ids.strip(",").split(",") if x.isdigit()]
+
+    def add_enquiry(self, pk):
+        if pk not in self.enquiry_list():
+            self.enquiry_ids = "," + ",".join(str(x) for x in self.enquiry_list() + [pk]) + ","
+
+    def protected_until(self):
+        """Date until which nobody else can register this student; None = not protected."""
+        from datetime import timedelta
+        if not self.consultant_id or self.status in ("closed", "released"): return None
+        if self.status == "signed": return "permanent"
+        start = self.last_activity or self.created_at
+        return (start + timedelta(days=PROTECT_DAYS)).date() if start else None
+
+    def is_protected(self, today=None):
+        from django.utils import timezone
+        u = self.protected_until()
+        return u == "permanent" or (u is not None and u >= (today or timezone.localdate()))
+
+
+class LeadReport(Referral):
+    class Meta:
+        proxy = True
+        verbose_name = verbose_name_plural = "業績總覽"
