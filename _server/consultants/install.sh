@@ -55,4 +55,5 @@ echo "test link:      $($CHECK -o /dev/null -w '%{http_code}' https://summitbril
 echo "home page:      $($CHECK -o /dev/null -w '%{http_code}' https://summitbrilliance.com/zh/)   (should be 200)"
 echo "contact form:   $($CHECK -o /dev/null -w '%{http_code}' https://summitbrilliance.com/zh/contact.html)   (should be 200)"
 echo "admin:          $($CHECK -o /dev/null -w '%{http_code}' https://summitbrilliance.com/admin/)   (should be 302)"
+echo "2fa page:       $($CHECK -o /dev/null -w '%{http_code}' https://summitbrilliance.com/admin/2fa/)   (should be 302)"
 echo "ALL DONE - backup kept in $BK"

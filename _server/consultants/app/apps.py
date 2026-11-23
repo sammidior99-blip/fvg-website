@@ -29,6 +29,14 @@ class ConsultantsConfig(AppConfig):
         except LookupError:
             pass
 
+        # login security: wrong-password limits + 登入紀錄 (see security.py)
+        from django.contrib import admin
+        from django.contrib.auth.signals import user_logged_in, user_login_failed
+        from .security import LockoutLoginForm, on_logged_in, on_login_failed
+        admin.site.login_form = LockoutLoginForm
+        user_login_failed.connect(on_login_failed, weak=False, dispatch_uid="fvg-login-failed")
+        user_logged_in.connect(on_logged_in, weak=False, dispatch_uid="fvg-logged-in")
+
         try:
             self._extend_enquiry_admin(apps.get_model("pages", "Enquiry"))
         except Exception:

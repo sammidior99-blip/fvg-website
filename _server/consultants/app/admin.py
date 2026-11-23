@@ -7,7 +7,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.db.models import Count
 from django.utils.html import format_html, format_html_join
 
-from .models import PROTECT_DAYS, Consultant, LeadReport, Referral
+from .models import PROTECT_DAYS, Consultant, LeadReport, LoginAttempt, Referral, TwoFactor
 
 SITE = "https://summitbrilliance.com"
 GROUP = "銷售顧問"
@@ -34,6 +34,10 @@ class ConsultantForm(forms.ModelForm):
         help_text="填咗就會開一個後台帳號俾呢位顧問（例如 fv01 或者佢嘅英文名）。佢登入 /admin 只會見到自己嘅客戶同自己嘅資料。")
     password = forms.CharField(label="設定 / 重設密碼", required=False, widget=forms.PasswordInput(render_value=False),
         help_text="新帳號必須填；之後留空 = 密碼不變。至少 8 個字元，唔好用太簡單嘅密碼。")
+    require_2fa = forms.BooleanField(label="必須開啟雙重驗證", required=False,
+        help_text="剔咗之後，顧問下次登入要先用手機驗證 App 設定好，先可以繼續使用後台。")
+    reset_2fa = forms.BooleanField(label="重設雙重驗證", required=False,
+        help_text="顧問換咗手機又冇晒備用碼時用：清除佢嘅驗證設定，佢下次登入時重新掃 QR 碼。")
 
     class Meta:
         model = Consultant
@@ -43,6 +47,9 @@ class ConsultantForm(forms.ModelForm):
         super().__init__(*a, **k)
         if self.instance.pk and self.instance.user_id:
             self.fields["login"].initial = self.instance.user.get_username()
+            tf = TwoFactor.objects.filter(user_id=self.instance.user_id).first()
+            self.fields["require_2fa"].initial = bool(tf and tf.required)
+            self.fields["reset_2fa"].help_text += "（現時：" + ("已開啟" if tf and tf.enabled else "未開啟") + "）"
 
     def clean(self):
         d = super().clean()
@@ -89,7 +96,7 @@ class ConsultantAdmin(admin.ModelAdmin):
         if not request.user.is_superuser:
             return (("我的專屬連結及二維碼", {"fields": ("code_info", "link", "qr_big")}), info)
         return (("專屬連結及二維碼", {"fields": ("code_info", "link", "qr_big", "lang")}), info,
-                ("後台帳號（顧問自己登入睇客戶進度）", {"fields": ("login", "password")}),
+                ("後台帳號（顧問自己登入睇客戶進度）", {"fields": ("login", "password", "require_2fa", "reset_2fa")}),
                 ("狀態", {"fields": ("active", "forward_to", "created_at", "updated_at")}))
 
     def get_readonly_fields(self, request, obj=None):
@@ -114,6 +121,11 @@ class ConsultantAdmin(admin.ModelAdmin):
         u.email = obj.email or u.email
         if pw: u.set_password(pw)
         u.save()
+        tf, _ = TwoFactor.objects.get_or_create(user=u)
+        if form.cleaned_data.get("reset_2fa"):
+            tf.enabled, tf.secret, tf.backup_codes, tf.enabled_at = False, "", "", None
+        tf.required = bool(form.cleaned_data.get("require_2fa"))
+        tf.save()
         g, _ = Group.objects.get_or_create(name=GROUP)
         g.permissions.set(Permission.objects.filter(content_type__app_label="consultants", codename__in=GROUP_PERMS))
         u.groups.add(g)
@@ -380,3 +392,46 @@ class LeadReportAdmin(admin.ModelAdmin):
                "by_partner": [x for x in group(lambda r: (r.coop_type, r.coop_name.strip()), lambda k: f"{coop_label.get(k[0], k[0])}：{k[1]}") if not x[0].endswith("：")][:30],
                "is_boss": request.user.is_superuser, "protect_days": PROTECT_DAYS}
         return TemplateResponse(request, "admin/consultants/report.html", ctx)
+
+
+# ================================================================ login security
+@admin.register(LoginAttempt)
+class LoginAttemptAdmin(admin.ModelAdmin):
+    """Company only: every admin login try, and 解鎖 for a consultant who typed the wrong password too often."""
+    list_display = ("at", "username", "kind", "ip", "agent")
+    list_filter = ("kind", "at")
+    search_fields = ("username", "ip")
+    date_hierarchy = "at"
+    actions = ["unlock"]
+
+    def has_module_permission(self, request): return request.user.is_superuser
+    def has_view_permission(self, request, obj=None): return request.user.is_superuser
+    def has_add_permission(self, request): return False
+    def has_change_permission(self, request, obj=None): return False
+    def has_delete_permission(self, request, obj=None): return False
+
+    def get_actions(self, request):
+        return super().get_actions(request) if request.user.is_superuser else {}
+
+    @admin.action(description="解鎖所選紀錄嘅登入名稱同 IP（可即時再試）")
+    def unlock(self, request, queryset):
+        from .security import clear, record
+        n = 0
+        for username, ip in set(queryset.values_list("username", "ip")):
+            n += clear(username=username) + clear(ip=ip)
+            record(request, username, "unlock")
+        self.message_user(request, f"已解鎖（清除咗 {n} 個錯誤紀錄）。")
+
+
+@admin.register(TwoFactor)
+class TwoFactorAdmin(admin.ModelAdmin):
+    """A menu entry for every admin user: opens their own two-factor page."""
+    def has_module_permission(self, request): return request.user.is_active and request.user.is_staff
+    def has_view_permission(self, request, obj=None): return request.user.is_active and request.user.is_staff
+    def has_add_permission(self, request): return False
+    def has_change_permission(self, request, obj=None): return False
+    def has_delete_permission(self, request, obj=None): return False
+
+    def changelist_view(self, request, extra_context=None):
+        from django.http import HttpResponseRedirect
+        return HttpResponseRedirect("/admin/2fa/")
