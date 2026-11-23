@@ -31,6 +31,8 @@ class Consultant(models.Model):
     active = models.BooleanField("啟用", default=True, help_text="顧問離職就取消剔選。佢嘅連結會改為顯示下面「轉交給」嘅顧問，或者公司聯絡方式。")
     forward_to = models.ForeignKey("self", verbose_name="停用後轉交給", null=True, blank=True, on_delete=models.SET_NULL,
                                    related_name="+", limit_choices_to={"active": True})
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, verbose_name="後台登入帳號", null=True, blank=True,
+                                on_delete=models.SET_NULL, related_name="consultant")
     created_at = models.DateTimeField("建立時間", auto_now_add=True)
     updated_at = models.DateTimeField("最後修改", auto_now=True)
 
@@ -59,11 +61,15 @@ class Referral(models.Model):
     """Which consultant a booking-form enquiry came through (pages.Enquiry is left untouched)."""
     enquiry_id = models.IntegerField("查詢編號", unique=True)
     consultant = models.ForeignKey(Consultant, verbose_name="推薦顧問", null=True, on_delete=models.SET_NULL, related_name="referrals")
-    code = models.CharField("連結代號", max_length=40)
+    code = models.CharField("連結代號", max_length=40, blank=True)
+    source = models.CharField("來源", max_length=10, choices=[("link", "顧問連結"), ("assigned", "公司分派")], default="link")
+    followed_up = models.BooleanField("已跟進", default=False)
+    notes = models.TextField("跟進備註", blank=True)
     created_at = models.DateTimeField("時間", auto_now_add=True)
+    updated_at = models.DateTimeField("最後更新", auto_now=True)
 
     class Meta:
-        verbose_name = verbose_name_plural = "顧問帶來的查詢"
+        verbose_name = verbose_name_plural = "顧問負責的查詢"
         ordering = ["-created_at"]
 
     def __str__(self):
