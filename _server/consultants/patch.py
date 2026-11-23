@@ -9,7 +9,12 @@ BLOCKS = {
         "INSTALLED_APPS = list(INSTALLED_APPS) + ['consultants']\n"
         "MIDDLEWARE = list(MIDDLEWARE) + ['consultants.middleware.ConsultantMiddleware']\n"
         "CONSULTANT_MEDIA_ROOT = '/var/www/consultant-media'\n"
-        "DATA_UPLOAD_MAX_MEMORY_SIZE = max(globals().get('DATA_UPLOAD_MAX_MEMORY_SIZE') or 0, 5 * 1024 * 1024)\n"),
+        "DATA_UPLOAD_MAX_MEMORY_SIZE = max(globals().get('DATA_UPLOAD_MAX_MEMORY_SIZE') or 0, 5 * 1024 * 1024)\n"
+        "try:  # SMTP + notification addresses from /etc/fvg-mail.env (setup-mail.sh)\n"
+        "    from consultants.mailconf import load as _fvg_mail\n"
+        "    globals().update(_fvg_mail())\n"
+        "except Exception:\n"
+        "    pass\n"),
     f"{D}/mysite/urls.py": (
         "from django.urls import include as _fvg_include, path as _fvg_path\n"
         "urlpatterns = [_fvg_path('', _fvg_include('consultants.urls'))] + list(urlpatterns)\n"),

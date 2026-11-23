@@ -16,6 +16,7 @@ restore() {
   echo "!! putting the backup back..."
   cp -a "$BK/settings.py" "$M/mysite/settings.py"; cp -a "$BK/urls.py" "$M/mysite/urls.py"; cp -a "$BK/db.sqlite3" "$M/db.sqlite3"
   rm -rf "$M/consultants"; [ -d "$BK/consultants" ] && cp -a "$BK/consultants" "$M/consultants"
+  [ -f "$M/consultants/management/commands/lead_reminders.py" ] || rm -f /etc/cron.d/fvg-leads
   systemctl restart gunicorn
   echo "!! RESTORED - the website is as it was before. Send a screenshot of this screen to Claude."
   exit 1
@@ -41,6 +42,15 @@ echo "6/7 database"
 cd "$M" && sudo -u "$OWNER" "$PY" manage.py migrate consultants --noinput || restore "migrate"
 sudo -u "$OWNER" "$PY" manage.py sync_leads || restore "register existing enquiries"
 sudo -u "$OWNER" "$PY" manage.py check 2>&1 | tail -1
+
+echo "6b/7 daily follow-up reminders (09:00 Hong Kong time) + mail settings file"
+cat > /etc/cron.d/fvg-leads <<CRON
+CRON_TZ=Asia/Hong_Kong
+0 9 * * * $OWNER cd $M && $PY manage.py lead_reminders >> /var/log/fvg-leads.log 2>&1
+CRON
+chmod 644 /etc/cron.d/fvg-leads; touch /var/log/fvg-leads.log; chown "$OWNER": /var/log/fvg-leads.log
+bash "$SRC/setup-mail.sh" --permissions-only
+[ -s /etc/fvg-mail.env ] || echo "   (no mail account yet: run  sudo bash $SRC/setup-mail.sh  to turn the e-mail alerts on)"
 
 echo "7/7 restart + nginx"
 systemctl restart gunicorn || restore "restart gunicorn"
