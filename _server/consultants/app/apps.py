@@ -20,8 +20,10 @@ class ConsultantsConfig(AppConfig):
             req = current_request()
             code = req.COOKIES.get(COOKIE, "") if req is not None else ""
             from .leads import from_enquiry
+            from .notify import new_enquiry
             try:
-                from_enquiry(instance, find(code) if code else None, code)
+                c = find(code) if code else None
+                new_enquiry(instance, from_enquiry(instance, c, code), c)
             except Exception:  # never let this break the customer's form
                 import logging
                 logging.getLogger(__name__).exception("lead registration failed for enquiry %s", instance.pk)
@@ -71,6 +73,7 @@ class ConsultantsConfig(AppConfig):
             actions = original(request)
             if not request.user.is_superuser: return actions
             from .leads import from_enquiry, note
+            from .notify import assigned
             for c in Consultant.objects.filter(active=True).order_by("code"):
                 def assign(modeladmin, req, queryset, c=c):
                     for e in queryset:
@@ -79,6 +82,7 @@ class ConsultantsConfig(AppConfig):
                             note(r, f"公司分派給 {c.name_zh}（{c.code}）。")
                             r.consultant, r.code, r.source, r.last_activity = c, c.code, "assigned", timezone.now()
                             r.save()
+                            assigned(r)
                     modeladmin.message_user(req, f"已將 {queryset.count()} 個查詢分派給 {c.name_zh}（{c.code}）。", messages.SUCCESS)
                 name = f"assign_consultant_{c.pk}"
                 actions[name] = (assign, name, f"分派給顧問：{c.name_zh}（{c.code}）".replace("%", "%%"))

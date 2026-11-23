@@ -168,6 +168,8 @@ from django.template.response import TemplateResponse  # noqa: E402
 from django.utils import timezone  # noqa: E402
 
 from . import leads as L  # noqa: E402
+from . import notify as N  # noqa: E402
+from datetime import timedelta  # noqa: E402
 
 ENQ_FIELDS = [("created_at", "提交時間"), ("language", "語言"), ("parent_name", "家長／監護人"), ("student_name", "學生"),
               ("phone", "電話"), ("email", "電郵"), ("school", "就讀學校"), ("grade", "年級"), ("service", "感興趣的服務"),
@@ -231,16 +233,25 @@ class ProtectionFilter(admin.SimpleListFilter):
 class DueFilter(admin.SimpleListFilter):
     title, parameter_name = "跟進提醒", "due"
 
-    def lookups(self, request, model_admin): return (("due", "今日或之前要跟進"),)
+    def lookups(self, request, model_admin):
+        return (("overdue", "已逾期"), ("today", "今天要跟進"), ("due", "今天或之前（逾期 + 今天）"), ("week", "未來 7 天"), ("none", "未定跟進日期"))
 
     def queryset(self, request, qs):
-        return qs.filter(next_date__lte=timezone.localdate()).exclude(status__in=["signed", "closed", "released"]) if self.value() == "due" else qs
+        v, t = self.value(), timezone.localdate()
+        if not v: return qs
+        qs = qs.exclude(status__in=["signed", "closed", "released"])
+        if v == "overdue": return qs.filter(next_date__lt=t)
+        if v == "today": return qs.filter(next_date=t)
+        if v == "due": return qs.filter(next_date__lte=t)
+        if v == "week": return qs.filter(next_date__gt=t, next_date__lte=t + timedelta(days=7))
+        if v == "none": return qs.filter(next_date__isnull=True)
+        return qs
 
 
 @admin.register(Referral)
 class LeadAdmin(admin.ModelAdmin):
     form = LeadForm
-    list_display = ("reg_date", "student_name", "gender", "phone", "coop", "consultant", "status", "next_date", "protection")
+    list_display = ("reg_date", "student_name", "gender", "phone", "coop", "consultant", "status", "next_col", "protection")
     list_display_links = ("reg_date", "student_name")
     list_filter = ("status", DueFilter, "coop_type", "consultant", ProtectionFilter, "source")
     search_fields = ("student_name", "parent_name", "phone", "wechat", "email", "coop_name", "notes")
@@ -288,6 +299,7 @@ class LeadAdmin(admin.ModelAdmin):
         if not change:
             if not request.user.is_superuser: obj.consultant = own(request)
             obj.source = "manual"
+        reassigned = request.user.is_superuser and "consultant" in form.changed_data and obj.consultant_id
         if not change or FOLLOW_FIELDS & set(form.changed_data) or "consultant" in form.changed_data:
             obj.last_activity = timezone.now()
         for m in getattr(form, "claims", []):  # an unassigned website enquiry of the same student: merge it in
@@ -297,12 +309,22 @@ class LeadAdmin(admin.ModelAdmin):
         for m in getattr(form, "claims", []): m.delete()
         by = obj.consultant.name_zh if obj.consultant else "公司"
         for m in getattr(form, "releases", []): L.release(m, by)
+        if not change: N.new_referral(obj, by_company=request.user.is_superuser)
+        elif reassigned: N.assigned(obj)
         sib = L.siblings(obj.phone, obj.student_name, exclude_pk=obj.pk)
         if sib and not change:
             messages.info(request, "提示：同一電話已報備咗其他服務對象（例如兄弟姊妹）：" + "、".join(s.student_name or "—" for s in sib[:5]))
         E = enquiry_model()
         if E and hasattr(E, "followed_up") and obj.enquiry_list():
             E._base_manager.filter(pk__in=obj.enquiry_list()).update(followed_up=obj.status not in ("new",))
+
+    @admin.display(description="下次跟進日期", ordering="next_date")
+    def next_col(self, obj):
+        if not obj.next_date: return "—"
+        late = (timezone.localdate() - obj.next_date).days
+        if obj.status in ("signed", "closed", "released") or late < 0: return f"{obj.next_date:%Y-%m-%d}"
+        if late == 0: return format_html('<b style="color:#b26a00">{}（今天）</b>', f"{obj.next_date:%Y-%m-%d}")
+        return format_html('<b style="color:#c62828">{}（逾期 {} 天）</b>', f"{obj.next_date:%Y-%m-%d}", late)
 
     @admin.display(description="報備時間", ordering="created_at")
     def reg_date(self, obj): return timezone.localtime(obj.created_at).strftime("%Y-%m-%d")
