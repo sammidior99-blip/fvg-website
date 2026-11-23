@@ -148,3 +148,24 @@ class LeadReport(Referral):
     class Meta:
         proxy = True
         verbose_name = verbose_name_plural = "業績總覽"
+
+
+class ReferralLog(models.Model):
+    """Change history of a 客戶報備, written automatically on every save/delete (see history.py).
+    Nobody can edit or delete it in the admin, so it can settle disputes about who registered whom and when."""
+    ACTIONS = [("baseline", "起始狀態"), ("create", "新增"), ("change", "修改"), ("delete", "刪除")]
+    referral = models.ForeignKey(Referral, verbose_name="客戶報備", null=True, blank=True, on_delete=models.SET_NULL, related_name="logs")
+    referral_pk = models.IntegerField("報備編號", null=True, blank=True, db_index=True)
+    label = models.CharField("服務對象", max_length=250, blank=True)
+    at = models.DateTimeField("時間", auto_now_add=True, db_index=True)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="帳號", null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    actor = models.CharField("操作者", max_length=150, blank=True)
+    action = models.CharField("動作", max_length=10, choices=ACTIONS)
+    changes = models.JSONField("改動", default=list, blank=True)  # [[field label, old, new], ...]
+
+    class Meta:
+        verbose_name = verbose_name_plural = "修改紀錄"
+        ordering = ["-at", "-pk"]
+
+    def __str__(self):
+        return f"{self.label} · {self.get_action_display()}"

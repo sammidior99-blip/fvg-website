@@ -16,7 +16,7 @@
 .fv-scroll{overflow-x:auto}
 </style>
 <div class="fv-rep">
-  <p class="tabs">{% for k, v in periods %}<a href="?p={{ k }}" class="{% if k == p %}on{% endif %}">{{ v }}</a>{% endfor %}</p>
+  <p class="tabs">{% for k, v in periods %}<a href="?p={{ k }}" class="{% if k == p %}on{% endif %}">{{ v }}</a>{% endfor %}<a href="?p={{ p }}&amp;export=xlsx" style="float:right">⬇ 匯出 Excel</a></p>
   <p class="muted">按「報備時間」計算。成交金額只計「已簽約」嘅客戶。保護期：最後跟進後 {{ protect_days }} 日；已簽約永久保護。</p>
   <div class="big">
     <div>報備客戶<b>{{ total.total }}</b></div>
