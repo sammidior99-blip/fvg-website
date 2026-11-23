@@ -36,6 +36,8 @@ class Consultant(models.Model):
     active = models.BooleanField("啟用", default=True, help_text="顧問離職就取消剔選。佢嘅連結會改為顯示下面「轉交給」嘅顧問，或者公司聯絡方式。")
     forward_to = models.ForeignKey("self", verbose_name="停用後轉交給", null=True, blank=True, on_delete=models.SET_NULL,
                                    related_name="+", limit_choices_to={"active": True})
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, verbose_name="後台登入帳號", null=True, blank=True,
+                                on_delete=models.SET_NULL, related_name="consultant")
     created_at = models.DateTimeField("建立時間", auto_now_add=True)
     updated_at = models.DateTimeField("最後修改", auto_now=True)
 
@@ -66,16 +68,32 @@ class Consultant(models.Model):
         return "".join(ch for ch in (self.whatsapp or self.phone) if ch.isdigit())
 
 
+STATUS = [("new", "新查詢"), ("contacted", "已聯絡"), ("meeting", "已安排會談"), ("proposal", "已提交方案"),
+          ("signed", "已簽約"), ("closed", "暫不跟進")]
+
+
 class Referral(models.Model):
-    """Which consultant a booking-form enquiry came through (pages.Enquiry is left untouched)."""
+    """A booking-form enquiry handled by a consultant (came through their link, or assigned by the company),
+    with the consultant's follow-up progress. pages.Enquiry itself is left untouched."""
     enquiry_id = models.IntegerField("查詢編號", unique=True)
-    consultant = models.ForeignKey(Consultant, verbose_name="推薦顧問", null=True, on_delete=models.SET_NULL, related_name="referrals")
-    code = models.CharField("連結代號", max_length=40)
+    consultant = models.ForeignKey(Consultant, verbose_name="負責顧問", null=True, on_delete=models.SET_NULL, related_name="referrals")
+    code = models.CharField("連結代號", max_length=40, blank=True)
+    source = models.CharField("來源", max_length=10, choices=[("link", "顧問連結"), ("assigned", "公司分派")], default="link")
+    status = models.CharField("進度", max_length=10, choices=STATUS, default="new")
+    next_date = models.DateField("下次跟進日期", null=True, blank=True)
+    notes = models.TextField("跟進備註", blank=True, help_text="例如：已 WhatsApp 聯絡，家長想了解英國本科，約咗下星期三見面。")
     created_at = models.DateTimeField("時間", auto_now_add=True)
+    updated_at = models.DateTimeField("最後更新", auto_now=True)
 
     class Meta:
-        verbose_name = verbose_name_plural = "顧問帶來的查詢"
+        verbose_name = verbose_name_plural = "客戶跟進"
         ordering = ["-created_at"]
 
     def __str__(self):
-        return f"#{self.enquiry_id} ← {self.code}"
+        from django.apps import apps
+        try:
+            e = apps.get_model("pages", "Enquiry")._base_manager.filter(pk=self.enquiry_id).first()
+        except LookupError:
+            e = None
+        name = (getattr(e, "parent_name", "") or getattr(e, "student_name", "")) if e else ""
+        return f"{name or '客戶'}（查詢 #{self.enquiry_id}）"
