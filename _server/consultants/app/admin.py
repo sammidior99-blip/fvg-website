@@ -12,15 +12,7 @@ SITE = "https://summitbrilliance.com"
 class ConsultantForm(forms.ModelForm):
     class Meta:
         model = Consultant
-        fields = "__all__"
-
-    def clean_code(self):
-        return (self.cleaned_data.get("code") or "").strip().lower()
-
-    def _post_clean(self):
-        # lower-case the code before the format and uniqueness checks run
-        if "code" in self.cleaned_data: self.instance.code = self.cleaned_data["code"]
-        super()._post_clean()
+        exclude = ("code",)  # the code is given out automatically (fv01, fv02, ...) and never edited
 
 
 @admin.register(Consultant)
@@ -29,15 +21,19 @@ class ConsultantAdmin(admin.ModelAdmin):
     list_display = ("name_zh", "name_en", "code", "link", "qr_small", "active", "leads")
     list_filter = ("active",)
     search_fields = ("name_zh", "name_en", "code", "phone", "email")
-    readonly_fields = ("link", "qr_big", "created_at", "updated_at")
+    readonly_fields = ("code_info", "link", "qr_big", "created_at", "updated_at")
     fieldsets = (
-        ("專屬連結及二維碼", {"fields": ("code", "link", "qr_big", "lang")}),
+        ("專屬連結及二維碼", {"fields": ("code_info", "link", "qr_big", "lang")}),
         ("顯示喺網站上嘅資料", {"fields": ("name_zh", "name_en", "title_zh", "title_en", "photo", "phone", "whatsapp", "wechat_id", "wechat_qr", "email")}),
         ("狀態", {"fields": ("active", "forward_to", "created_at", "updated_at")}),
     )
 
     def get_queryset(self, request):
         return super().get_queryset(request).annotate(n=Count("referrals"))
+
+    @admin.display(description="連結代號")
+    def code_info(self, obj):
+        return obj.code if obj.pk else f"儲存後自動分配（下一個係 {Consultant.next_code()}）"
 
     @admin.display(description="帶來查詢", ordering="n")
     def leads(self, obj):
