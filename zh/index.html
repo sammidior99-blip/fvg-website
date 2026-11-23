@@ -410,6 +410,7 @@ a{color:#1D4ED8}a:hover{color:#1E3A8A}
   fetch('/news.json', {cache: 'no-cache'}).then(function(r){ if (!r.ok) throw 0; return r.json(); }).then(render).catch(function(){});
 })();
 </script>
+<script src="/consultant.js" defer></script>
 <script>(function(){
   var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
   document.querySelectorAll('[data-cf]').forEach(function(root){
@@ -444,6 +445,5 @@ a{color:#1D4ED8}a:hover{color:#1E3A8A}
   });
 })();
 </script>
-<script src="/consultant.js" defer></script>
 </body>
 </html>
