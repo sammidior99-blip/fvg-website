@@ -7,7 +7,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.db.models import Count
 from django.utils.html import format_html, format_html_join
 
-from .models import PROTECT_DAYS, Consultant, LeadReport, LoginAttempt, Referral, TwoFactor
+from .models import PROTECT_DAYS, Consultant, LeadReport, LoginAttempt, Referral, ReferralLog, TwoFactor
 
 SITE = "https://summitbrilliance.com"
 GROUP = "銷售顧問"
@@ -276,10 +276,11 @@ class LeadAdmin(admin.ModelAdmin):
         info = ["protection", "created_at", "last_activity"] + (["source", "code"] if request.user.is_superuser else [])
         if request.user.is_superuser: fs.insert(0, ("報備顧問", {"fields": ("consultant",)}))
         if obj: fs.append(("報備資料", {"fields": info}))
+        if obj: fs.append(("修改紀錄", {"fields": ("history",), "description": "系統自動記錄，任何人都改唔到。"}))
         return fs
 
     def get_readonly_fields(self, request, obj=None):
-        return ("details", "protection", "created_at", "last_activity", "source", "code")
+        return ("details", "protection", "created_at", "last_activity", "source", "code", "history")
 
     def has_delete_permission(self, request, obj=None): return request.user.is_superuser
 
@@ -319,6 +320,11 @@ class LeadAdmin(admin.ModelAdmin):
         if u and u >= timezone.localdate(): return f"保護至 {u:%Y-%m-%d}"
         return "已過期"
 
+    @admin.display(description="修改紀錄")
+    def history(self, obj):
+        logs = list(obj.logs.all()) if obj.pk else []
+        return render_logs(logs) if logs else "—"
+
     @admin.display(description="官網查詢內容")
     def details(self, obj):
         E = enquiry_model()
@@ -334,6 +340,59 @@ class LeadAdmin(admin.ModelAdmin):
                 format_html_join("", '<tr><th style="text-align:left;padding:3px 16px 3px 0;white-space:nowrap;vertical-align:top">{}</th>'
                                      '<td style="padding:3px 0;white-space:pre-wrap">{}</td></tr>', rows)))
         return format_html_join("", "{}", ((p,) for p in parts)) if parts else "—"
+
+
+# ================================================================ change history (修改紀錄)
+CELL = "padding:4px 12px 4px 0;vertical-align:top;border-bottom:1px solid var(--hairline-color,#eee)"
+
+
+def render_changes(changes):
+    return format_html_join("", '<div><b>{}</b>：{} → {}</div>',
+                            ((f, o or "（空白）", n or "（空白）") for f, o, n in (changes or []))) or "—"
+
+
+def render_logs(logs):
+    rows = format_html_join("", '<tr><td style="' + CELL + ';white-space:nowrap">{}</td><td style="' + CELL + ';white-space:nowrap">{}</td>'
+                                '<td style="' + CELL + ';white-space:nowrap">{}</td><td style="' + CELL + ';white-space:pre-wrap">{}</td></tr>',
+                            ((timezone.localtime(x.at).strftime("%Y-%m-%d %H:%M"), x.actor or "—", x.get_action_display(), render_changes(x.changes))
+                             for x in logs))
+    return format_html('<table style="border-collapse:collapse;width:100%"><thead><tr><th style="text-align:left">時間</th><th style="text-align:left">操作者</th>'
+                       '<th style="text-align:left">動作</th><th style="text-align:left">改動</th></tr></thead><tbody>{}</tbody></table>', rows)
+
+
+@admin.register(ReferralLog)
+class ReferralLogAdmin(admin.ModelAdmin):
+    """Company admins only: every change of every 客戶報備, including deleted ones. Read-only for everybody."""
+    list_display = ("when", "label", "actor", "action", "summary", "open_referral")
+    list_filter = ("action", "actor")
+    search_fields = ("label", "actor", "referral_pk")
+    date_hierarchy = "at"
+    fields = ("when", "label", "referral_pk", "open_referral", "actor", "user", "action", "detail")
+    readonly_fields = fields
+
+    def has_module_permission(self, request): return request.user.is_superuser
+    def has_view_permission(self, request, obj=None): return request.user.is_superuser
+    def has_add_permission(self, request): return False
+    def has_change_permission(self, request, obj=None): return False
+    def has_delete_permission(self, request, obj=None): return False
+
+    @admin.display(description="時間", ordering="at")
+    def when(self, obj): return timezone.localtime(obj.at).strftime("%Y-%m-%d %H:%M:%S")
+
+    @admin.display(description="改動")
+    def summary(self, obj):
+        ch = obj.changes or []
+        t = "、".join(c[0] for c in ch[:4]) + ("…" if len(ch) > 4 else "")
+        return t or "—"
+
+    @admin.display(description="改動內容")
+    def detail(self, obj): return render_changes(obj.changes)
+
+    @admin.display(description="客戶報備")
+    def open_referral(self, obj):
+        if not obj.referral_id: return "（已刪除）" if obj.referral_pk else "—"
+        from django.urls import reverse
+        return format_html('<a href="{}">打開</a>', reverse("admin:consultants_referral_change", args=[obj.referral_id]))
 
 
 # ================================================================ results summary (業績總覽)
@@ -391,6 +450,9 @@ class LeadReportAdmin(admin.ModelAdmin):
                "by_coop": group(lambda r: r.coop_type, lambda k: coop_label.get(k, k)),
                "by_partner": [x for x in group(lambda r: (r.coop_type, r.coop_name.strip()), lambda k: f"{coop_label.get(k[0], k[0])}：{k[1]}") if not x[0].endswith("：")][:30],
                "is_boss": request.user.is_superuser, "protect_days": PROTECT_DAYS}
+        if request.GET.get("export") == "xlsx":
+            from .export import report_xlsx
+            return report_xlsx(request, ctx, rows, dict(PERIODS)[p], c)
         return TemplateResponse(request, "admin/consultants/report.html", ctx)
 
 

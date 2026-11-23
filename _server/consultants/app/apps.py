@@ -11,6 +11,8 @@ class ConsultantsConfig(AppConfig):
         from django.db.models.signals import post_save
         from .middleware import current_request
         from .views import COOKIE, find
+        from .history import connect as connect_history
+        connect_history()  # 修改紀錄 for every change of a 客戶報備
 
         def remember(sender, instance, created, **kw):
             """A new website booking form: register the student automatically (and credit the consultant whose link was used)."""

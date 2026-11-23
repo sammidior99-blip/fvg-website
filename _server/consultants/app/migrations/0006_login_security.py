@@ -8,7 +8,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("consultants", "0004_lead_registration"),
+        ("consultants", "0005_referral_log"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
