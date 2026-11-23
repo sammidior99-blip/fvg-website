@@ -28,3 +28,26 @@ class ConsultantMiddleware:
             if response.has_header("Content-Length"):
                 response["Content-Length"] = str(len(response.content))
         return response
+
+
+class TwoFactorMiddleware:
+    """For admin users who turned on (or must turn on) authenticator codes: after the password, ask for the code
+    before any other /admin page opens."""
+    OPEN = ("/admin/2fa/", "/admin/login/", "/admin/logout/", "/admin/jsi18n/")
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        user = getattr(request, "user", None)
+        if (request.path.startswith("/admin/") and not request.path.startswith(self.OPEN)
+                and user is not None and user.is_authenticated and user.is_staff):
+            from urllib.parse import quote
+            from django.http import HttpResponseRedirect
+            from .security import SESSION_KEY, two_factor_of
+            tf = two_factor_of(user)
+            if tf and tf.enabled and request.session.get(SESSION_KEY) != user.pk:
+                return HttpResponseRedirect("/admin/2fa/verify/?next=" + quote(request.get_full_path()))
+            if tf and tf.required and not tf.enabled:
+                return HttpResponseRedirect("/admin/2fa/")
+        return self.get_response(request)

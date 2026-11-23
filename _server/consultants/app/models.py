@@ -169,3 +169,42 @@ class ReferralLog(models.Model):
 
     def __str__(self):
         return f"{self.label} · {self.get_action_display()}"
+
+
+# ================================================================ login security
+class LoginAttempt(models.Model):
+    """One row per admin login try (and per two-factor code try): used to slow down password guessing,
+    and kept as a 登入紀錄 the company can look through."""
+    KINDS = [("ok", "登入成功"), ("fail", "密碼錯誤"), ("locked", "已鎖定，拒絕登入"),
+             ("2fa_ok", "驗證碼正確"), ("2fa_fail", "驗證碼錯誤"), ("unlock", "公司解鎖")]
+    at = models.DateTimeField("時間", auto_now_add=True, db_index=True)
+    username = models.CharField("登入名稱", max_length=150, db_index=True)
+    ip = models.CharField("IP", max_length=45, db_index=True)
+    kind = models.CharField("結果", max_length=10, choices=KINDS)
+    cleared = models.BooleanField("已解除", default=False, help_text="成功登入或公司解鎖之後，之前嘅錯誤唔再計數。")
+    agent = models.CharField("瀏覽器", max_length=200, blank=True)
+
+    class Meta:
+        verbose_name = verbose_name_plural = "登入紀錄"
+        ordering = ["-at"]
+
+    def __str__(self):
+        return f"{self.username} {self.get_kind_display()} {self.at:%Y-%m-%d %H:%M}"
+
+
+class TwoFactor(models.Model):
+    """Authenticator-app codes (Google / Microsoft Authenticator) for one admin login."""
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, verbose_name="後台帳號", on_delete=models.CASCADE,
+                                related_name="two_factor")
+    secret = models.CharField(max_length=64, blank=True)
+    enabled = models.BooleanField("已開啟", default=False)
+    required = models.BooleanField("必須開啟", default=False)
+    backup_codes = models.TextField(blank=True)  # salted hashes, one per line; a used code is removed
+    last_step = models.BigIntegerField(default=0)  # the last 30-second step accepted, so a code works only once
+    enabled_at = models.DateTimeField("開啟時間", null=True, blank=True)
+
+    class Meta:
+        verbose_name = verbose_name_plural = "雙重驗證"
+
+    def __str__(self):
+        return f"{self.user} ({'已開啟' if self.enabled else '未開啟'})"

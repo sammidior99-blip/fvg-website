@@ -1,0 +1,65 @@
+{% extends "admin/base_site.html" %}
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="/admin/">首頁</a> › {{ title }}</div>{% endblock %}
+{% block content %}
+<style>
+  .tf { max-width: 560px; line-height: 1.6; }
+  .tf input[name=code] { font-size: 1.4em; letter-spacing: .15em; width: 10em; padding: 6px; }
+  .tf .err { color: #ba2121; font-weight: bold; }
+  .tf .qr svg { width: 220px; height: 220px; }
+  .tf code { font-size: 1.1em; }
+  .tf ul.codes { columns: 2; font-family: monospace; font-size: 1.25em; }
+  .tf form { margin: 1.2em 0; }
+</style>
+<div class="tf">
+{% if error %}<p class="err">{{ error }}</p>{% endif %}
+
+{% if mode == "verify" %}
+  <p>請打開手機嘅驗證 App（Google Authenticator / Microsoft Authenticator），輸入 <b>Summit Brilliance</b> 而家顯示嘅 6 位數字。</p>
+  <p>手機唔喺身邊？可以輸入一個備用碼（每個只可用一次）。</p>
+  <form method="post">{% csrf_token %}<input type="hidden" name="next" value="{{ next }}">
+    <input name="code" autocomplete="one-time-code" inputmode="numeric" autofocus required>
+    <input type="submit" value="確認">
+  </form>
+  <p><a href="/admin/logout/">取消並登出</a></p>
+
+{% elif mode == "setup" %}
+  {% if required %}<p class="err">公司要求你嘅帳號開啟雙重驗證，完成之後先可以繼續使用後台。</p>{% endif %}
+  <p>開咗之後，每次登入除咗密碼，仲要輸入手機 App 顯示嘅 6 位數字。就算密碼外洩，其他人都入唔到。</p>
+  <ol>
+    <li>喺手機安裝 <b>Google Authenticator</b> 或 <b>Microsoft Authenticator</b>（免費）。</li>
+    <li>喺 App 揀「新增 / 掃描 QR 碼」，掃下面個二維碼。<br>
+      <span class="qr">{{ qr|safe }}</span><br>
+      掃唔到可以手動輸入密鑰：<code>{{ secret }}</code></li>
+    <li>輸入 App 顯示嘅 6 位數字：</li>
+  </ol>
+  <form method="post">{% csrf_token %}
+    <input name="code" autocomplete="one-time-code" inputmode="numeric" autofocus required>
+    <input type="submit" value="開啟雙重驗證">
+  </form>
+
+{% elif mode == "codes" %}
+  {% if just_enabled %}<p><b>雙重驗證已開啟。</b></p>{% endif %}
+  <p class="err">請即刻抄低或者影低以下備用碼，放喺安全地方。呢版離開之後就唔會再顯示。</p>
+  <p>手機唔見或者換機時，每個備用碼可以代替驗證碼用一次。</p>
+  <ul class="codes">{% for c in codes %}<li>{{ c }}</li>{% endfor %}</ul>
+  <p><a class="button" href="{{ next }}">我已經記低，返回後台</a></p>
+
+{% else %}
+  <p>狀態：<b>已開啟</b>（{{ tf.enabled_at|date:"Y-m-d" }} 起）{% if tf.required %}，公司要求必須開啟{% endif %}。</p>
+  <p>剩餘備用碼：<b>{{ left }}</b> 個。</p>
+  <form method="post">{% csrf_token %}<input type="hidden" name="action" value="backup">
+    <p>重新產生備用碼（舊嘅全部作廢）：輸入而家嘅驗證碼
+    <input name="code" autocomplete="one-time-code" inputmode="numeric" required>
+    <input type="submit" value="產生新備用碼"></p>
+  </form>
+  {% if not tf.required %}
+  <form method="post">{% csrf_token %}<input type="hidden" name="action" value="disable">
+    <p>停用雙重驗證：輸入而家嘅驗證碼
+    <input name="code" autocomplete="one-time-code" inputmode="numeric" required>
+    <input type="submit" value="停用"></p>
+  </form>
+  {% endif %}
+  <p>換手機：喺新手機用備用碼登入，停用後再重新開啟一次。{% if tf.required %}如需重設請聯絡公司管理員。{% endif %}</p>
+{% endif %}
+</div>
+{% endblock %}

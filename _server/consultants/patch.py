@@ -7,7 +7,7 @@ MARK_A, MARK_B = "# >>> fvg consultants (added by _server/consultants/install.sh
 BLOCKS = {
     f"{D}/mysite/settings.py": (
         "INSTALLED_APPS = list(INSTALLED_APPS) + ['consultants']\n"
-        "MIDDLEWARE = list(MIDDLEWARE) + ['consultants.middleware.ConsultantMiddleware']\n"
+        "MIDDLEWARE = list(MIDDLEWARE) + ['consultants.middleware.ConsultantMiddleware', 'consultants.middleware.TwoFactorMiddleware']\n"
         "CONSULTANT_MEDIA_ROOT = '/var/www/consultant-media'\n"
         "DATA_UPLOAD_MAX_MEMORY_SIZE = max(globals().get('DATA_UPLOAD_MAX_MEMORY_SIZE') or 0, 5 * 1024 * 1024)\n"),
     f"{D}/mysite/urls.py": (
