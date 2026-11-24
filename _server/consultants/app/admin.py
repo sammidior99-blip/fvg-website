@@ -11,6 +11,7 @@ from .models import PROTECT_DAYS, Consultant, LeadReport, LoginAttempt, Referral
 
 SITE = "https://summitbrilliance.com"
 GROUP = "销售顾问"
+ACCOUNT_TITLE = "顾问账户设置"  # what a consultant (not the boss) sees for their own 销售顾问 record
 GROUP_PERMS = ["view_referral", "change_referral", "add_referral", "view_consultant", "change_consultant", "view_leadreport"]
 
 
@@ -110,6 +111,27 @@ class ConsultantAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request): return request.user.is_superuser
     def has_delete_permission(self, request, obj=None): return request.user.is_superuser
+
+    # A consultant only has their own record: the menu item opens it directly as 顾问账户设置 (the boss keeps 销售顾问).
+    def changelist_view(self, request, extra_context=None):
+        if not request.user.is_superuser:
+            me = Consultant.objects.filter(user=request.user).first()
+            if me:
+                from django.shortcuts import redirect
+                return redirect("admin:consultants_consultant_change", me.pk)
+        return super().changelist_view(request, extra_context)
+
+    def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
+        if not request.user.is_superuser:
+            extra_context = {**(extra_context or {}), "title": ACCOUNT_TITLE, "subtitle": None}
+        return super().changeform_view(request, object_id, form_url, extra_context)
+
+    def response_change(self, request, obj):
+        if not request.user.is_superuser and "_continue" not in request.POST:
+            from django.shortcuts import redirect
+            messages.success(request, "已保存。")
+            return redirect("admin:consultants_consultant_change", obj.pk)
+        return super().response_change(request, obj)
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
@@ -533,3 +555,24 @@ class TwoFactorAdmin(admin.ModelAdmin):
     def changelist_view(self, request, extra_context=None):
         from django.http import HttpResponseRedirect
         return HttpResponseRedirect("/admin/2fa/")
+
+
+# ================================================================ menu: 顾问账户设置 for consultants
+_site_get_app_list = admin.site.get_app_list
+
+
+def _get_app_list(request, app_label=None):
+    app_list = _site_get_app_list(request, app_label)
+    if request.user.is_authenticated and not request.user.is_superuser:
+        me = Consultant.objects.filter(user=request.user).first()
+        for app in app_list:
+            for m in app.get("models", []):
+                if app.get("app_label") == "consultants" and m.get("object_name") == "Consultant":
+                    m["name"] = ACCOUNT_TITLE
+                    if me:
+                        from django.urls import reverse
+                        m["admin_url"] = reverse("admin:consultants_consultant_change", args=[me.pk])
+    return app_list
+
+
+admin.site.get_app_list = _get_app_list
