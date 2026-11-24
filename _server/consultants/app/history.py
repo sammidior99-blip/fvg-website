@@ -1,7 +1,7 @@
-"""Automatic change history (修改紀錄) for 客戶報備.
+"""Automatic change history (修改记录) for 客户报备.
 Every save or delete of a Referral, from any path (admin form, website booking form, company assignment actions,
 release after the protection period, sync_leads), is compared with the values loaded from the database and written
-to ReferralLog together with the logged-in user (from the current request) or 「系統」."""
+to ReferralLog together with the logged-in user (from the current request) or “系统”."""
 from django.db.models.signals import post_delete, post_init, post_save
 
 from .middleware import current_request
@@ -38,8 +38,8 @@ def who():
         c = Consultant.objects.filter(user=u).first()
         name = f"{c.name_zh}（{c.code}）" if c else (u.get_full_name() or u.get_username())
         return u, name + ("" if c else "（公司）" if u.is_superuser else "")
-    if req is not None and not req.path.startswith("/admin"): return None, "系統：官網表格"
-    return None, "系統"
+    if req is not None and not req.path.startswith("/admin"): return None, "系统：官网表格"
+    return None, "系统"
 
 
 def diff(obj, before):
@@ -50,7 +50,7 @@ def diff(obj, before):
         o, n = show(obj, f, old), show(obj, f, new)
         if o == n: continue
         if f.name == "notes" and o and n.startswith(o):  # notes are usually appended: keep only the new part
-            o, n = "（之前內容不變）", "＋ " + n[len(o):].strip()
+            o, n = "（之前内容不变）", "＋ " + n[len(o):].strip()
         out.append([str(f.verbose_name), o, n])
     return out
 

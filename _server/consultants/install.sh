@@ -28,6 +28,7 @@ mkdir -p "$BK" && cp -a "$M/db.sqlite3" "$M/mysite/settings.py" "$M/mysite/urls.
 
 echo "2/7 libraries (QR codes, Excel export)"
 "$M/venv/bin/pip" install -q --disable-pip-version-check segno openpyxl || restore "pip install segno openpyxl"
+"$M/venv/bin/pip" install -q --disable-pip-version-check opencc-python-reimplemented || echo "   (opencc not installed: website-app labels in the admin stay Traditional; everything else is Simplified)"
 
 echo "3/7 add-on code"
 rm -rf "$M/consultants" && cp -r "$SRC/app" "$M/consultants" && chown -R "$OWNER": "$M/consultants" || restore "copy code"

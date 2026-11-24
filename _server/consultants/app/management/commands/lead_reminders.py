@@ -17,12 +17,12 @@ class Command(BaseCommand):
     def handle(self, *a, dry_run=False, test=None, **k):
         if test:
             try:
-                n = notify.send([test], "【測試】summitbrilliance 通知設定成功",
-                                [("結果", "郵件設定正常，之後新預約、新報備和每日跟進提醒都會寄出。"),
-                                 ("公司收件人", ", ".join(notify.company()) or "（未設定 NOTIFY_EMAILS）")], sync=True, raise_errors=True)
+                n = notify.send([test], "【测试】summitbrilliance 通知设置成功",
+                                [("结果", "邮件设置正常，之后新预约、新报备和每日跟进提醒都会发送。"),
+                                 ("公司收件人", ", ".join(notify.company()) or "（未设置 NOTIFY_EMAILS）")], sync=True, raise_errors=True)
             except Exception as e:
-                raise CommandError(f"寄不出測試信：{e!r}\n請檢查 SMTP 主機、連接埠、帳號和密碼。")
-            if not n: raise CommandError("寄不出測試信（伺服器沒有接受）。")
+                raise CommandError(f"测试邮件发送失败：{e!r}\n请检查 SMTP 主机、端口、账号和密码。")
+            if not n: raise CommandError("测试邮件发送失败（服务器未接受）。")
             self.stdout.write(f"OK test mail sent to {test}"); return
         n = notify.send_digest(dry_run=dry_run, stdout=self.stdout)
         self.stdout.write(f"reminders sent: {n}" + (" (dry run)" if dry_run else ""))

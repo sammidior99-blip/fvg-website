@@ -12,37 +12,37 @@ def media_storage():
     # a callable, so the folder comes from settings and is not written into the migrations
     return media
 IMAGE = [FileExtensionValidator(["jpg", "jpeg", "png", "webp"])]
-LANGS = [("en", "English"), ("zh", "繁體中文"), ("cn", "简体中文")]
+LANGS = [("en", "English"), ("zh", "繁体中文"), ("cn", "简体中文")]
 
 
 class Consultant(models.Model):
-    code = models.CharField("連結代號", max_length=40, unique=True,
-        validators=[RegexValidator(r"^[a-z0-9][a-z0-9-]*$", "只可用英文小寫、數字同 -，例如 amy 或 amy-chan")],
-        help_text="專屬連結會係 summitbrilliance.com/s/<代號>，例如 amy。發出二維碼之後唔好再改。")
+    code = models.CharField("链接代号", max_length=40, unique=True,
+        validators=[RegexValidator(r"^[a-z0-9][a-z0-9-]*$", "只可用英文小写、数字和 -，例如 amy 或 amy-chan")],
+        help_text="专属链接将为 summitbrilliance.com/s/<代号>，例如 amy。发出二维码之后请勿再修改。")
     name_zh = models.CharField("中文姓名", max_length=60)
     name_en = models.CharField("英文姓名", max_length=60, blank=True)
-    title_zh = models.CharField("中文職稱", max_length=60, blank=True, help_text="例如：升學規劃顧問")
-    title_en = models.CharField("英文職稱", max_length=60, blank=True, help_text="例如：Education Consultant")
-    photo = models.FileField("相片", storage=media_storage, upload_to="photos/", blank=True, validators=IMAGE,
-        help_text="正方形相片效果最好（jpg / png / webp，2MB 以內）")
-    phone = models.CharField("電話", max_length=40, blank=True, help_text="連國家碼，例如 +852 9123 4567")
-    whatsapp = models.CharField("WhatsApp 號碼", max_length=40, blank=True,
-        help_text="連國家碼，例如 85291234567。留空就用上面嘅電話。")
-    wechat_id = models.CharField("微信號", max_length=60, blank=True)
-    wechat_qr = models.FileField("微信二維碼", storage=media_storage, upload_to="wechat/", blank=True, validators=IMAGE,
-        help_text="喺微信「我 › 個人資料 › 我的二維碼」截圖上載")
-    email = models.EmailField("電郵", blank=True)
-    lang = models.CharField("連結打開嘅語言", max_length=2, choices=LANGS, default="zh")
-    active = models.BooleanField("啟用", default=True, help_text="顧問離職就取消剔選。佢嘅連結會改為顯示下面「轉交給」嘅顧問，或者公司聯絡方式。")
-    forward_to = models.ForeignKey("self", verbose_name="停用後轉交給", null=True, blank=True, on_delete=models.SET_NULL,
+    title_zh = models.CharField("中文职称", max_length=60, blank=True, help_text="例如：升学规划顾问")
+    title_en = models.CharField("英文职称", max_length=60, blank=True, help_text="例如：Education Consultant")
+    photo = models.FileField("照片", storage=media_storage, upload_to="photos/", blank=True, validators=IMAGE,
+        help_text="正方形照片效果最好（jpg / png / webp，2MB 以内）")
+    phone = models.CharField("电话", max_length=40, blank=True, help_text="连国家码，例如 +852 9123 4567")
+    whatsapp = models.CharField("WhatsApp 号码", max_length=40, blank=True,
+        help_text="连国家码，例如 85291234567。留空则使用上面的电话。")
+    wechat_id = models.CharField("微信号", max_length=60, blank=True)
+    wechat_qr = models.FileField("微信二维码", storage=media_storage, upload_to="wechat/", blank=True, validators=IMAGE,
+        help_text="在微信“我 › 个人资料 › 我的二维码”截图上传")
+    email = models.EmailField("邮箱", blank=True)
+    lang = models.CharField("链接打开的语言", max_length=2, choices=LANGS, default="zh")
+    active = models.BooleanField("启用", default=True, help_text="顾问离职时取消勾选。其链接将改为显示下方“转交给”的顾问，或公司联系方式。")
+    forward_to = models.ForeignKey("self", verbose_name="停用后转交给", null=True, blank=True, on_delete=models.SET_NULL,
                                    related_name="+", limit_choices_to={"active": True})
-    user = models.OneToOneField(settings.AUTH_USER_MODEL, verbose_name="後台登入帳號", null=True, blank=True,
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, verbose_name="后台登录账号", null=True, blank=True,
                                 on_delete=models.SET_NULL, related_name="consultant")
-    created_at = models.DateTimeField("建立時間", auto_now_add=True)
-    updated_at = models.DateTimeField("最後修改", auto_now=True)
+    created_at = models.DateTimeField("建立时间", auto_now_add=True)
+    updated_at = models.DateTimeField("最后修改", auto_now=True)
 
     class Meta:
-        verbose_name = verbose_name_plural = "銷售顧問"
+        verbose_name = verbose_name_plural = "销售顾问"
         ordering = ["name_en", "name_zh"]
 
     def __str__(self):
@@ -59,7 +59,7 @@ class Consultant(models.Model):
         return f"fv{(max(nums) + 1) if nums else 1:02d}"
 
     def current(self, depth=0):
-        """The consultant who should be shown for this link (follows 停用後轉交給)."""
+        """The consultant who should be shown for this link (follows 停用后转交给)."""
         if self.active: return self
         if self.forward_to_id and depth < 5: return self.forward_to.current(depth + 1)
         return None
@@ -68,60 +68,60 @@ class Consultant(models.Model):
         return "".join(ch for ch in (self.whatsapp or self.phone) if ch.isdigit())
 
 
-STATUS = [("new", "新報備"), ("contacted", "已聯絡"), ("meeting", "已安排會談"), ("proposal", "已提交方案"),
-          ("signed", "已簽約"), ("closed", "暫不跟進"), ("released", "已釋放（由他人重新報備）")]
-COOP = [("direct", "官網／直接客戶"), ("channel", "渠道合作"), ("push", "客戶推進"), ("referral", "客戶推薦"), ("branch", "分公司")]
-SOURCE = [("website", "官網表格"), ("manual", "顧問錄入"), ("link", "顧問連結"), ("assigned", "公司分派")]
+STATUS = [("new", "新报备"), ("contacted", "已联系"), ("meeting", "已安排会谈"), ("proposal", "已提交方案"),
+          ("signed", "已签约"), ("closed", "暂不跟进"), ("released", "已释放（由他人重新报备）")]
+COOP = [("direct", "官网／直接客户"), ("channel", "渠道合作"), ("push", "客户推进"), ("referral", "客户推荐"), ("branch", "分公司")]
+SOURCE = [("website", "官网表格"), ("manual", "顾问录入"), ("link", "顾问链接"), ("assigned", "公司分派")]
 GENDER = [("M", "男"), ("F", "女")]
-PRODUCTS = [("ug", "本科升學全案"), ("pg", "研究生升學全案"), ("hs", "海外高中入學全案"), ("dual", "國內美高升學全案"),
-            ("camp", "名校研學營"), ("research", "世界名校教授科研項目"), ("online", "線上美國高中"),
-            ("growth", "國際化成長規劃"), ("identity", "身份與全球流動性"), ("other", "其他")]
-CURRENCY = [("HKD", "港元 HKD"), ("CNY", "人民幣 CNY"), ("USD", "美元 USD")]
+PRODUCTS = [("ug", "本科升学全案"), ("pg", "研究生升学全案"), ("hs", "海外高中入学全案"), ("dual", "国内美高升学全案"),
+            ("camp", "名校研学营"), ("research", "世界名校教授科研项目"), ("online", "线上美国高中"),
+            ("growth", "国际化成长规划"), ("identity", "身份与全球流动性"), ("other", "其他")]
+CURRENCY = [("HKD", "港币 HKD"), ("CNY", "人民币 CNY"), ("USD", "美元 USD")]
 PROTECT_DAYS = getattr(settings, "LEAD_PROTECT_DAYS", 90)
 
 
 class Referral(models.Model):
-    """One registered 服務對象 (the student being served) and the consultant who registered it first.
+    """One registered 服务对象 (the student being served) and the consultant who registered it first.
     Entered automatically from the website booking form, or by a consultant. A parent can have several children:
     each child is its own record. pages.Enquiry itself is left untouched."""
-    consultant = models.ForeignKey(Consultant, verbose_name="報備顧問", null=True, blank=True, on_delete=models.SET_NULL, related_name="referrals")
+    consultant = models.ForeignKey(Consultant, verbose_name="报备顾问", null=True, blank=True, on_delete=models.SET_NULL, related_name="referrals")
     # the student being served
-    student_name = models.CharField("服務對象姓名", max_length=100, default="", blank=True)
-    gender = models.CharField("性別", max_length=1, choices=GENDER, blank=True)
-    id_last4 = models.CharField("身份證最後四位", max_length=4, blank=True, help_text="用嚟分辨同名同姓；可留空")
-    grade = models.CharField("年級", max_length=50, blank=True)
-    school = models.CharField("就讀學校", max_length=150, blank=True)
+    student_name = models.CharField("服务对象姓名", max_length=100, default="", blank=True)
+    gender = models.CharField("性别", max_length=1, choices=GENDER, blank=True)
+    id_last4 = models.CharField("身份证最后四位", max_length=4, blank=True, help_text="用于区分同名同姓；可留空")
+    grade = models.CharField("年级", max_length=50, blank=True)
+    school = models.CharField("就读学校", max_length=150, blank=True)
     # the client (usually a parent)
-    parent_name = models.CharField("客戶／家長姓名", max_length=100, blank=True)
-    phone = models.CharField("電話", max_length=40, blank=True, help_text="連國家碼，例如 +852 9123 4567")
-    wechat = models.CharField("微信號", max_length=60, blank=True)
-    email = models.EmailField("電郵", blank=True)
-    interest = models.CharField("感興趣的服務", max_length=200, blank=True)
+    parent_name = models.CharField("客户／家长姓名", max_length=100, blank=True)
+    phone = models.CharField("电话", max_length=40, blank=True, help_text="连国家码，例如 +852 9123 4567")
+    wechat = models.CharField("微信号", max_length=60, blank=True)
+    email = models.EmailField("邮箱", blank=True)
+    interest = models.CharField("感兴趣的服务", max_length=200, blank=True)
     # where the client came from
     coop_type = models.CharField("合作方式", max_length=10, choices=COOP, default="direct")
-    coop_name = models.CharField("合作方名稱", max_length=150, blank=True, help_text="例如渠道公司名稱、分公司名稱、推薦人姓名")
-    source = models.CharField("錄入方式", max_length=10, choices=SOURCE, default="website")
-    code = models.CharField("連結代號", max_length=40, blank=True)
-    enquiry_ids = models.CharField("官網查詢編號", max_length=200, blank=True, help_text="內部使用")
+    coop_name = models.CharField("合作方名称", max_length=150, blank=True, help_text="例如渠道公司名称、分公司名称、推荐人姓名")
+    source = models.CharField("录入方式", max_length=10, choices=SOURCE, default="website")
+    code = models.CharField("链接代号", max_length=40, blank=True)
+    enquiry_ids = models.CharField("官网查询编号", max_length=200, blank=True, help_text="内部使用")
     # follow-up
-    status = models.CharField("進度", max_length=10, choices=STATUS, default="new")
-    next_date = models.DateField("下次跟進日期", null=True, blank=True)
-    notes = models.TextField("跟進備註", blank=True, help_text="例如：已 WhatsApp 聯絡，家長想了解英國本科，約咗下星期三見面。")
-    last_activity = models.DateTimeField("最後跟進", null=True, blank=True)
+    status = models.CharField("进度", max_length=10, choices=STATUS, default="new")
+    next_date = models.DateField("下次跟进日期", null=True, blank=True)
+    notes = models.TextField("跟进备注", blank=True, help_text="例如：已 WhatsApp 联系，家长想了解英国本科，约了下周三见面。")
+    last_activity = models.DateTimeField("最后跟进", null=True, blank=True)
     # deal
-    signed_date = models.DateField("簽約日期", null=True, blank=True)
-    product = models.CharField("簽約產品", max_length=10, choices=PRODUCTS, blank=True)
-    amount = models.DecimalField("合約金額", max_digits=12, decimal_places=2, null=True, blank=True)
-    currency = models.CharField("貨幣", max_length=3, choices=CURRENCY, default="HKD")
-    created_at = models.DateTimeField("報備時間", auto_now_add=True)
-    updated_at = models.DateTimeField("最後更新", auto_now=True)
+    signed_date = models.DateField("签约日期", null=True, blank=True)
+    product = models.CharField("签约产品", max_length=10, choices=PRODUCTS, blank=True)
+    amount = models.DecimalField("合约金额", max_digits=12, decimal_places=2, null=True, blank=True)
+    currency = models.CharField("货币", max_length=3, choices=CURRENCY, default="HKD")
+    created_at = models.DateTimeField("报备时间", auto_now_add=True)
+    updated_at = models.DateTimeField("最后更新", auto_now=True)
 
     class Meta:
-        verbose_name = verbose_name_plural = "客戶報備"
+        verbose_name = verbose_name_plural = "客户报备"
         ordering = ["-created_at"]
 
     def __str__(self):
-        return f"{self.student_name or self.parent_name or '客戶'}（{self.parent_name or self.phone or '—'}）"
+        return f"{self.student_name or self.parent_name or '客户'}（{self.parent_name or self.phone or '—'}）"
 
     def enquiry_list(self):
         return [int(x) for x in self.enquiry_ids.strip(",").split(",") if x.isdigit()]
@@ -147,24 +147,24 @@ class Referral(models.Model):
 class LeadReport(Referral):
     class Meta:
         proxy = True
-        verbose_name = verbose_name_plural = "業績總覽"
+        verbose_name = verbose_name_plural = "业绩总览"
 
 
 class ReferralLog(models.Model):
-    """Change history of a 客戶報備, written automatically on every save/delete (see history.py).
+    """Change history of a 客户报备, written automatically on every save/delete (see history.py).
     Nobody can edit or delete it in the admin, so it can settle disputes about who registered whom and when."""
-    ACTIONS = [("baseline", "起始狀態"), ("create", "新增"), ("change", "修改"), ("delete", "刪除")]
-    referral = models.ForeignKey(Referral, verbose_name="客戶報備", null=True, blank=True, on_delete=models.SET_NULL, related_name="logs")
-    referral_pk = models.IntegerField("報備編號", null=True, blank=True, db_index=True)
-    label = models.CharField("服務對象", max_length=250, blank=True)
-    at = models.DateTimeField("時間", auto_now_add=True, db_index=True)
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="帳號", null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    ACTIONS = [("baseline", "起始状态"), ("create", "新增"), ("change", "修改"), ("delete", "删除")]
+    referral = models.ForeignKey(Referral, verbose_name="客户报备", null=True, blank=True, on_delete=models.SET_NULL, related_name="logs")
+    referral_pk = models.IntegerField("报备编号", null=True, blank=True, db_index=True)
+    label = models.CharField("服务对象", max_length=250, blank=True)
+    at = models.DateTimeField("时间", auto_now_add=True, db_index=True)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="账号", null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
     actor = models.CharField("操作者", max_length=150, blank=True)
-    action = models.CharField("動作", max_length=10, choices=ACTIONS)
-    changes = models.JSONField("改動", default=list, blank=True)  # [[field label, old, new], ...]
+    action = models.CharField("动作", max_length=10, choices=ACTIONS)
+    changes = models.JSONField("改动", default=list, blank=True)  # [[field label, old, new], ...]
 
     class Meta:
-        verbose_name = verbose_name_plural = "修改紀錄"
+        verbose_name = verbose_name_plural = "修改记录"
         ordering = ["-at", "-pk"]
 
     def __str__(self):
@@ -174,18 +174,18 @@ class ReferralLog(models.Model):
 # ================================================================ login security
 class LoginAttempt(models.Model):
     """One row per admin login try (and per two-factor code try): used to slow down password guessing,
-    and kept as a 登入紀錄 the company can look through."""
-    KINDS = [("ok", "登入成功"), ("fail", "密碼錯誤"), ("locked", "已鎖定，拒絕登入"),
-             ("2fa_ok", "驗證碼正確"), ("2fa_fail", "驗證碼錯誤"), ("unlock", "公司解鎖")]
-    at = models.DateTimeField("時間", auto_now_add=True, db_index=True)
-    username = models.CharField("登入名稱", max_length=150, db_index=True)
+    and kept as a 登录记录 the company can look through."""
+    KINDS = [("ok", "登录成功"), ("fail", "密码错误"), ("locked", "已锁定，拒绝登录"),
+             ("2fa_ok", "验证码正确"), ("2fa_fail", "验证码错误"), ("unlock", "公司解锁")]
+    at = models.DateTimeField("时间", auto_now_add=True, db_index=True)
+    username = models.CharField("登录名称", max_length=150, db_index=True)
     ip = models.CharField("IP", max_length=45, db_index=True)
-    kind = models.CharField("結果", max_length=10, choices=KINDS)
-    cleared = models.BooleanField("已解除", default=False, help_text="成功登入或公司解鎖之後，之前嘅錯誤唔再計數。")
-    agent = models.CharField("瀏覽器", max_length=200, blank=True)
+    kind = models.CharField("结果", max_length=10, choices=KINDS)
+    cleared = models.BooleanField("已解除", default=False, help_text="成功登录或公司解锁之后，之前的错误不再计数。")
+    agent = models.CharField("浏览器", max_length=200, blank=True)
 
     class Meta:
-        verbose_name = verbose_name_plural = "登入紀錄"
+        verbose_name = verbose_name_plural = "登录记录"
         ordering = ["-at"]
 
     def __str__(self):
@@ -194,17 +194,17 @@ class LoginAttempt(models.Model):
 
 class TwoFactor(models.Model):
     """Authenticator-app codes (Google / Microsoft Authenticator) for one admin login."""
-    user = models.OneToOneField(settings.AUTH_USER_MODEL, verbose_name="後台帳號", on_delete=models.CASCADE,
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, verbose_name="后台账号", on_delete=models.CASCADE,
                                 related_name="two_factor")
     secret = models.CharField(max_length=64, blank=True)
-    enabled = models.BooleanField("已開啟", default=False)
-    required = models.BooleanField("必須開啟", default=False)
+    enabled = models.BooleanField("已开启", default=False)
+    required = models.BooleanField("必须开启", default=False)
     backup_codes = models.TextField(blank=True)  # salted hashes, one per line; a used code is removed
     last_step = models.BigIntegerField(default=0)  # the last 30-second step accepted, so a code works only once
-    enabled_at = models.DateTimeField("開啟時間", null=True, blank=True)
+    enabled_at = models.DateTimeField("开启时间", null=True, blank=True)
 
     class Meta:
-        verbose_name = verbose_name_plural = "雙重驗證"
+        verbose_name = verbose_name_plural = "双重验证"
 
     def __str__(self):
-        return f"{self.user} ({'已開啟' if self.enabled else '未開啟'})"
+        return f"{self.user} ({'已开启' if self.enabled else '未开启'})"

@@ -17,10 +17,20 @@ class ConsultantMiddleware:
 
     def __call__(self, request):
         _local.request = request
+        admin_page = request.path.startswith("/admin")
+        if admin_page:  # 后台 always in Simplified Chinese (zhs.py)
+            from django.utils import translation
+            from .zhs import ADMIN_LANGUAGE
+            before = translation.get_language()
+            translation.activate(ADMIN_LANGUAGE)
+            request.LANGUAGE_CODE = ADMIN_LANGUAGE
         try:
             response = self.get_response(request)
         finally:
             _local.request = None
+            if admin_page:
+                if before: translation.activate(before)
+                else: translation.deactivate()
         if (not request.path.startswith("/admin") and response.status_code == 200 and not response.streaming
                 and response.get("Content-Type", "").startswith("text/html")
                 and b"</body>" in response.content and SCRIPT not in response.content):

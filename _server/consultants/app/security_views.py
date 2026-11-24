@@ -46,17 +46,17 @@ def verify(request):
             request.session.pop("fvg_2fa_fails", None)
             left = sec.backup_codes_left(tf)
             if left <= 3:
-                messages.warning(request, f"備用碼只剩 {left} 個，請到「雙重驗證」重新產生。")
+                messages.warning(request, f"备用码只剩 {left} 个，请到“双重验证”重新产生。")
             return HttpResponseRedirect(_next(request))
         sec.record(request, request.user.get_username(), "2fa_fail")
         fails = request.session.get("fvg_2fa_fails", 0) + 1
         request.session["fvg_2fa_fails"] = fails
         if fails >= sec.CODE_FAIL_LIMIT:
             logout(request)
-            messages.error(request, "驗證碼錯誤次數太多，已登出。")
+            messages.error(request, "验证码错误次数太多，已登出。")
             return HttpResponseRedirect("/admin/login/")
-        error = f"驗證碼唔啱，請再試（仲有 {sec.CODE_FAIL_LIMIT - fails} 次機會）。"
-    return _page(request, "輸入驗證碼", mode="verify", error=error)
+        error = f"验证码不正确，请再试（还剩 {sec.CODE_FAIL_LIMIT - fails} 次机会）。"
+    return _page(request, "输入验证码", mode="verify", error=error)
 
 
 @never_cache
@@ -72,29 +72,29 @@ def setup(request):
         if request.method == "POST":
             step = sec.check_code(secret, request.POST.get("code", ""))
             if step is None:
-                error = "驗證碼唔啱。請確認手機時間準確，然後輸入 App 而家顯示嘅 6 位數字。"
+                error = "验证码不正确。请确认手机时间准确，然后输入 App 当前显示的 6 位数字。"
             else:
                 tf.secret, tf.last_step, tf.enabled, tf.enabled_at = secret, step, True, timezone.now()
                 codes = sec.new_backup_codes(tf)
                 tf.save()
                 request.session.pop(PENDING, None)
                 request.session[sec.SESSION_KEY] = request.user.pk
-                return _page(request, "雙重驗證已開啟", mode="codes", codes=codes, just_enabled=True)
-        return _page(request, "開啟雙重驗證", mode="setup", secret=secret, qr=_qr_svg(sec.otpauth_uri(secret, username)),
+                return _page(request, "双重验证已开启", mode="codes", codes=codes, just_enabled=True)
+        return _page(request, "开启双重验证", mode="setup", secret=secret, qr=_qr_svg(sec.otpauth_uri(secret, username)),
                      required=tf.required, error=error)
 
     if request.method == "POST":
         action = request.POST.get("action")
         if not sec.verify(tf, request.POST.get("code", "")):
-            error = "驗證碼唔啱，未有改動。"
+            error = "验证码不正确，未作修改。"
         elif action == "backup":
             codes = sec.new_backup_codes(tf)
             tf.save(update_fields=["backup_codes"])
-            return _page(request, "新備用碼", mode="codes", codes=codes)
+            return _page(request, "新备用码", mode="codes", codes=codes)
         elif action == "disable" and not tf.required:
             tf.enabled, tf.secret, tf.backup_codes, tf.enabled_at = False, "", "", None
             tf.save()
             request.session.pop(sec.SESSION_KEY, None)
-            messages.success(request, "已停用雙重驗證。")
+            messages.success(request, "已停用双重验证。")
             return HttpResponseRedirect("/admin/2fa/")
-    return _page(request, "雙重驗證", mode="status", tf=tf, left=sec.backup_codes_left(tf), error=error)
+    return _page(request, "双重验证", mode="status", tf=tf, left=sec.backup_codes_left(tf), error=error)

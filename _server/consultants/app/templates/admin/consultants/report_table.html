@@ -1,5 +1,5 @@
 <div class="fv-scroll"><table>
-<thead><tr><th></th><th>報備</th>{% for k, v in statuses %}<th>{{ v }}</th>{% endfor %}<th>成交率</th><th>成交金額</th><th>保護中</th><th>待跟進</th></tr></thead>
+<thead><tr><th></th><th>报备</th>{% for k, v in statuses %}<th>{{ v }}</th>{% endfor %}<th>成交率</th><th>成交金额</th><th>保护中</th><th>待跟进</th></tr></thead>
 <tbody>{% for name, s in groups %}<tr><td>{{ name }}</td><td>{{ s.total }}</td>{% for k, v in statuses %}<td>{% for kk, n in s.by.items %}{% if kk == k %}{{ n }}{% endif %}{% endfor %}</td>{% endfor %}<td>{{ s.rate }}</td><td>{{ s.amount_text }}</td><td>{{ s.protected }}</td><td>{{ s.due }}</td></tr>
-{% empty %}<tr><td colspan="12" class="muted">暫時未有資料</td></tr>{% endfor %}</tbody>
+{% empty %}<tr><td colspan="12" class="muted">暂无资料</td></tr>{% endfor %}</tbody>
 </table></div>

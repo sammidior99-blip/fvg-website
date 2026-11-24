@@ -1,4 +1,4 @@
-"""E-mail alerts (新預約 / 新報備 / 分派) and the daily follow-up digest.
+"""E-mail alerts (新预约 / 新报备 / 分派) and the daily follow-up digest.
 Sending never blocks or breaks the website: instant alerts go out in a background thread after the
 database has saved, and any failure is only written to the log."""
 import logging
@@ -40,7 +40,7 @@ def send(to, subject, rows, intro="", sync=False, raise_errors=False):
         body_txt = "\n".join(f"{k}：{v}" for k, v in rows if v not in (None, ""))
     html = (f'<div style="font-family:system-ui,-apple-system,sans-serif;color:#0F2340;font-size:14px;line-height:1.6">'
             f'{f"<p>{escape(intro)}</p>" if intro else ""}{body_html}'
-            f'<p style="color:#99a;font-size:12px;margin-top:24px">中昊寰宇 summitbrilliance.com 後台自動通知</p></div>')
+            f'<p style="color:#99a;font-size:12px;margin-top:24px">中昊寰宇 summitbrilliance.com 后台自动通知</p></div>')
     import re
     text = (intro + "\n\n" if intro else "") + (body_txt or re.sub(r"<[^>]+>", " ", body_html))
 
@@ -60,42 +60,42 @@ def send(to, subject, rows, intro="", sync=False, raise_errors=False):
 
 def _lead_rows(r):
     from django.utils.safestring import mark_safe
-    return [("服務對象", f"{r.student_name}{'（' + r.get_gender_display() + '）' if r.gender else ''}"),
-            ("年級 / 學校", " · ".join(x for x in (r.grade, r.school) if x)),
-            ("家長", r.parent_name), ("電話", r.phone), ("微信", r.wechat), ("電郵", r.email),
-            ("感興趣的服務", r.interest),
+    return [("服务对象", f"{r.student_name}{'（' + r.get_gender_display() + '）' if r.gender else ''}"),
+            ("年级 / 学校", " · ".join(x for x in (r.grade, r.school) if x)),
+            ("家长", r.parent_name), ("电话", r.phone), ("微信", r.wechat), ("邮箱", r.email),
+            ("感兴趣的服务", r.interest),
             ("合作方式", r.get_coop_type_display() + (f"：{r.coop_name}" if r.coop_name else "")),
-            ("報備顧問", f"{r.consultant.name_zh}（{r.consultant.code}）" if r.consultant else "未分派"),
-            ("進度", r.get_status_display()),
-            ("備註", r.notes[-600:]),
-            ("後台", mark_safe(f'<a href="{escape(lead_url(r))}">打開這個報備</a>'))]
+            ("报备顾问", f"{r.consultant.name_zh}（{r.consultant.code}）" if r.consultant else "未分派"),
+            ("进度", r.get_status_display()),
+            ("备注", r.notes[-600:]),
+            ("后台", mark_safe(f'<a href="{escape(lead_url(r))}">打开这个报备</a>'))]
 
 
 def new_enquiry(e, r, consultant=None):
-    """A website booking form was submitted (r = the 客戶報備 it was registered under)."""
+    """A website booking form was submitted (r = the 客户报备 it was registered under)."""
     try:
-        who = r.student_name or r.parent_name or "客戶"
-        rows = [("查詢編號", f"#{e.pk}"), ("客戶留言", getattr(e, "message", "") or "")] + _lead_rows(r)
+        who = r.student_name or r.parent_name or "客户"
+        rows = [("查询编号", f"#{e.pk}"), ("客户留言", getattr(e, "message", "") or "")] + _lead_rows(r)
         if r.consultant and r.consultant != consultant:  # an existing, protected registration of another consultant
-            intro = "這位服務對象已有報備，查詢已併入原有紀錄。"
+            intro = "这位服务对象已有报备，查询已并入原有记录。"
         elif consultant:
-            intro = f"客戶經 {consultant.name_zh} 的專屬連結提交了預約。"
+            intro = f"客户经 {consultant.name_zh} 的专属链接提交了预约。"
         else:
-            intro = "客戶沒有經顧問連結提交，請到後台分派給顧問。"
-        send(company(), f"【新預約】{who} · {r.consultant.name_zh if r.consultant else '未分派'}", rows, intro)
+            intro = "客户没有经顾问链接提交，请到后台分派给顾问。"
+        send(company(), f"【新预约】{who} · {r.consultant.name_zh if r.consultant else '未分派'}", rows, intro)
         if r.consultant:
-            send([consultant_email(r.consultant)], f"【新預約】{who}", rows,
-                 f"{r.consultant.name_zh} 你好，你的客戶經官網提交了預約，請盡快聯絡。")
+            send([consultant_email(r.consultant)], f"【新预约】{who}", rows,
+                 f"{r.consultant.name_zh} 你好，你的客户经官网提交了预约，请尽快联系。")
     except Exception:
         log.exception("new_enquiry alert failed")
 
 
 def new_referral(r, by_company=False):
-    """A consultant (or the company) entered a 客戶報備 by hand."""
+    """A consultant (or the company) entered a 客户报备 by hand."""
     try:
-        who = r.student_name or r.parent_name or "客戶"
+        who = r.student_name or r.parent_name or "客户"
         if not by_company:
-            send(company(), f"【新報備】{who} · {r.consultant.name_zh if r.consultant else '—'}", _lead_rows(r))
+            send(company(), f"【新报备】{who} · {r.consultant.name_zh if r.consultant else '—'}", _lead_rows(r))
         elif r.consultant:
             assigned(r)
     except Exception:
@@ -106,8 +106,8 @@ def assigned(r):
     """The company gave a lead to a consultant."""
     try:
         if not r.consultant: return
-        send([consultant_email(r.consultant)], f"【公司分派】{r.student_name or r.parent_name or '客戶'}", _lead_rows(r),
-             f"{r.consultant.name_zh} 你好，公司把以下客戶分派給你，請盡快聯絡。")
+        send([consultant_email(r.consultant)], f"【公司分派】{r.student_name or r.parent_name or '客户'}", _lead_rows(r),
+             f"{r.consultant.name_zh} 你好，公司把以下客户分派给你，请尽快联系。")
     except Exception:
         log.exception("assigned alert failed")
 
@@ -135,12 +135,12 @@ def digest_data(today=None):
 def _table(rs, today, extra):
     from django.utils.html import format_html
     head = "".join(f'<th style="text-align:left;padding:4px 10px;border-bottom:1px solid #dde">{h}</th>'
-                   for h in ("服務對象", "家長 / 電話", "進度", extra))
+                   for h in ("服务对象", "家长 / 电话", "进度", extra))
     body = ""
     for r in rs:
-        if extra == "保護期至":
-            u = r.protected_until(); x = f"{u:%Y-%m-%d}（尚餘 {(u - today).days} 天）"
-        elif extra == "報備時間":
+        if extra == "保护期至":
+            u = r.protected_until(); x = f"{u:%Y-%m-%d}（尚余 {(u - today).days} 天）"
+        elif extra == "报备时间":
             x = f"{timezone.localtime(r.created_at):%Y-%m-%d}"
         else:
             x = f"{r.next_date:%Y-%m-%d}" + (f"（逾期 {(today - r.next_date).days} 天）" if r.next_date < today else "")
@@ -153,8 +153,8 @@ def _table(rs, today, extra):
 
 def _sections(d, today, with_consultant=False):
     html = ""
-    for key, title, extra in (("overdue", "已逾期", "下次跟進日期"), ("today", "今天要跟進", "下次跟進日期"),
-                              ("expiring", "保護期快到（到期後其他顧問可重新報備；更新跟進可延長保護）", "保護期至")):
+    for key, title, extra in (("overdue", "已逾期", "下次跟进日期"), ("today", "今天要跟进", "下次跟进日期"),
+                              ("expiring", "保护期快到（到期后其他顾问可重新报备；更新跟进可延长保护）", "保护期至")):
         if d.get(key):
             html += f'<h3 style="font-size:15px;margin:16px 0 6px">{title}（{len(d[key])}）</h3>' + _table(d[key], today, extra)
     return html
@@ -168,10 +168,10 @@ def send_digest(today=None, dry_run=False, stdout=None):
     for c, d in per.items():
         to = consultant_email(c)
         n = sum(len(v) for v in d.values())
-        subj = f"【跟進提醒 {today:%m-%d}】逾期 {len(d['overdue'])} · 今天 {len(d['today'])} · 保護期快到 {len(d['expiring'])}"
-        say(f"{c.code} {c.name_zh} <{to or '沒有電郵'}>: {n} items")
+        subj = f"【跟进提醒 {today:%m-%d}】逾期 {len(d['overdue'])} · 今天 {len(d['today'])} · 保护期快到 {len(d['expiring'])}"
+        say(f"{c.code} {c.name_zh} <{to or '没有邮箱'}>: {n} items")
         if to and not dry_run:
-            sent += send([to], subj, _sections(d, today), f"{c.name_zh} 你好，以下是今天需要處理的客戶。", sync=True)
+            sent += send([to], subj, _sections(d, today), f"{c.name_zh} 你好，以下是今天需要处理的客户。", sync=True)
     # company summary
     html = ""
     for c, d in per.items():
@@ -179,9 +179,9 @@ def send_digest(today=None, dry_run=False, stdout=None):
             html += f'<h2 style="font-size:16px;margin:22px 0 4px">{escape(c.name_zh)}（{escape(c.code)}）</h2>' + \
                     _sections({"overdue": d["overdue"], "expiring": d["expiring"]}, today)
     if unassigned:
-        html += f'<h2 style="font-size:16px;margin:22px 0 4px">未分派的官網預約（{len(unassigned)}）</h2>' + _table(unassigned, today, "報備時間")
+        html += f'<h2 style="font-size:16px;margin:22px 0 4px">未分派的官网预约（{len(unassigned)}）</h2>' + _table(unassigned, today, "报备时间")
     total_over = sum(len(d["overdue"]) for d in per.values())
-    say(f"company <{', '.join(company()) or '未設定 NOTIFY_EMAILS'}>: overdue {total_over}, unassigned {len(unassigned)}")
+    say(f"company <{', '.join(company()) or '未设置 NOTIFY_EMAILS'}>: overdue {total_over}, unassigned {len(unassigned)}")
     if html and company() and not dry_run:
-        sent += send(company(), f"【每日跟進總表 {today:%m-%d}】逾期 {total_over} · 未分派 {len(unassigned)}", html, sync=True)
+        sent += send(company(), f"【每日跟进总表 {today:%m-%d}】逾期 {total_over} · 未分派 {len(unassigned)}", html, sync=True)
     return sent

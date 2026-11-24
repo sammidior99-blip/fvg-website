@@ -1,5 +1,5 @@
-"""Lead registration rules (獲客報備).
-The same 服務對象 (student) = same name AND (same phone OR same last 4 ID digits), unless both genders are filled in and differ.
+"""Lead registration rules (获客报备).
+The same 服务对象 (student) = same name AND (same phone OR same last 4 ID digits), unless both genders are filled in and differ.
 A parent with two children = two students. The first registration wins while it is protected:
 protection lasts LEAD_PROTECT_DAYS (default 90) after the last follow-up; signed students stay protected."""
 import re
@@ -49,7 +49,7 @@ def note(obj, text):
 def release(old, by):
     """An expired record that someone else has now registered."""
     old.status = "released"
-    note(old, f"保護期已過，由 {by} 重新報備。")
+    note(old, f"保护期已过，由 {by} 重新报备。")
     old.save(update_fields=["status", "notes", "updated_at"])
 
 
@@ -64,7 +64,7 @@ def from_enquiry(e, consultant=None, code=""):
     if prot:  # first registration wins
         m = prot[0]
         m.add_enquiry(e.pk)
-        note(m, f"客戶再次經官網提交查詢（#{e.pk}{'，經 ' + code + ' 連結' if code else ''}）。")
+        note(m, f"客户再次经官网提交查询（#{e.pk}{'，经 ' + code + ' 链接' if code else ''}）。")
         m.save()
         return m
     open_ = [m for m in found if not m.consultant_id]
@@ -78,7 +78,7 @@ def from_enquiry(e, consultant=None, code=""):
     if found and not consultant:  # expired registration, no new consultant: keep the history together
         m = found[0]
         m.add_enquiry(e.pk)
-        note(m, f"客戶再次經官網提交查詢（#{e.pk}），保護期已過，可由公司重新分派。")
+        note(m, f"客户再次经官网提交查询（#{e.pk}），保护期已过，可由公司重新分派。")
         m.save()
         return m
     r = Referral(consultant=consultant, code=code, source="link" if consultant else "website",
@@ -86,8 +86,8 @@ def from_enquiry(e, consultant=None, code=""):
                  school=f("school"), grade=str(disp("grade"))[:50], interest=str(disp("service"))[:200],
                  last_activity=timezone.now() if consultant else None)
     r.add_enquiry(e.pk)
-    if f("message"): r.notes = f"客戶留言：{f('message')}"
+    if f("message"): r.notes = f"客户留言：{f('message')}"
     r.save()
     for m in found:  # older, expired registrations of the same student
-        release(m, consultant.name_zh if consultant else "官網新查詢")
+        release(m, consultant.name_zh if consultant else "官网新查询")
     return r

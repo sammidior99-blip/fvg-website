@@ -71,7 +71,7 @@ def clear(username=None, ip=None, kinds=("fail", "2fa_fail")):
 class LockoutLoginForm(AdminAuthenticationForm):
     """The /admin login form, refusing to even check the password while the name/IP is locked."""
     error_messages = {**AdminAuthenticationForm.error_messages,
-                      "locked": f"嘗試次數太多，請 {LOCK_MINUTES} 分鐘後再試。如需即時解鎖請聯絡公司管理員。"}
+                      "locked": f"尝试次数太多，请 {LOCK_MINUTES} 分钟后再试。如需立即解锁请联系公司管理员。"}
 
     def clean(self):
         username = self.cleaned_data.get("username")
@@ -92,7 +92,7 @@ def on_logged_in(sender, request, user, **kw):
     # only wrong passwords: wrong authenticator codes are forgotten after a correct code (security_views.verify),
     # so knowing the password does not give fresh code guesses with every new login
     clear(username=user.get_username(), ip=client_ip(request), kinds=("fail",))
-    LoginAttempt.objects.filter(at__lt=timezone.now() - timedelta(days=365)).delete()  # keep one year of 登入紀錄
+    LoginAttempt.objects.filter(at__lt=timezone.now() - timedelta(days=365)).delete()  # keep one year of 登录记录
 
 
 # ---------------------------------------------------------------- authenticator codes (RFC 6238)

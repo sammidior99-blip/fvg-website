@@ -1,6 +1,6 @@
-"""POST /api/booking - the booking form on the new (static) 聯絡與預約 page.
-Saves it as a normal website enquiry (pages.Enquiry), so it shows in 諮詢查詢 as before; that in turn registers the
-student in 客戶報備 (credited to the consultant whose link the visitor used) and sends the e-mail alerts."""
+"""POST /api/booking - the booking form on the new (static) 联系与预约 page.
+Saves it as a normal website enquiry (pages.Enquiry), so it shows in 咨询查询 as before; that in turn registers the
+student in 客户报备 (credited to the consultant whose link the visitor used) and sends the e-mail alerts."""
 import re
 
 from django.apps import apps
@@ -51,8 +51,8 @@ def booking(request):
     digits = re.sub(r"\D", "", contact)
     phone = contact if not email and len(digits) >= 7 and re.fullmatch(r"[\d\s+()\-]+", contact) else ""
     wechat = "" if (email or phone) else contact
-    lines = [f"身份：{role}" if role else "", f"主要關切：{concern}" if concern else "",
-             f"微信：{wechat}" if wechat else "", f"補充說明：{note}" if note else ""]
+    lines = [f"身份：{role}" if role else "", f"主要关切：{concern}" if concern else "",
+             f"微信：{wechat}" if wechat else "", f"补充说明：{note}" if note else ""]
     data = {"parent_name": name, "email": email, "phone": phone or (contact if not email and not wechat else ""),
             "message": "\n".join(x for x in lines if x)}
     lang = LANGS.get(p.get("lang", ""), "")
@@ -68,7 +68,7 @@ def booking(request):
             kw[fname] = v
         elif not f.has_default() and not f.null and not f.blank and not isinstance(f, models.ForeignKey):
             kw[fname] = _blank_for(f)
-    e = E.objects.create(**kw)  # triggers 客戶報備 registration + e-mail alerts (apps.py)
+    e = E.objects.create(**kw)  # triggers 客户报备 registration + e-mail alerts (apps.py)
 
     from .models import Referral  # add what the enquiry model has no field for
     r = Referral.objects.filter(enquiry_ids__contains=f",{e.pk},").first()

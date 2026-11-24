@@ -1,5 +1,5 @@
 {% extends "admin/base_site.html" %}
-{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">首頁</a> › 銷售顧問 › 業績總覽</div>{% endblock %}
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">首页</a> › 销售顾问 › 业绩总览</div>{% endblock %}
 {% block content %}
 <style>
 .fv-rep h2{margin:28px 0 10px;font-size:17px}
@@ -16,19 +16,19 @@
 .fv-scroll{overflow-x:auto}
 </style>
 <div class="fv-rep">
-  <p class="tabs">{% for k, v in periods %}<a href="?p={{ k }}" class="{% if k == p %}on{% endif %}">{{ v }}</a>{% endfor %}<a href="?p={{ p }}&amp;export=xlsx" style="float:right">⬇ 匯出 Excel</a></p>
-  <p class="muted">按「報備時間」計算。成交金額只計「已簽約」嘅客戶。保護期：最後跟進後 {{ protect_days }} 日；已簽約永久保護。</p>
+  <p class="tabs">{% for k, v in periods %}<a href="?p={{ k }}" class="{% if k == p %}on{% endif %}">{{ v }}</a>{% endfor %}<a href="?p={{ p }}&amp;export=xlsx" style="float:right">⬇ 导出 Excel</a></p>
+  <p class="muted">按“报备时间”计算。成交金额只计“已签约”的客户。保护期：最后跟进后 {{ protect_days }} 日；已签约永久保护。</p>
   <div class="big">
-    <div>報備客戶<b>{{ total.total }}</b></div>
-    <div>已簽約<b>{{ total.signed }}</b></div>
+    <div>报备客户<b>{{ total.total }}</b></div>
+    <div>已签约<b>{{ total.signed }}</b></div>
     <div>成交率<b>{{ total.rate }}</b></div>
-    <div>成交金額<b style="font-size:18px">{{ total.amount_text }}</b></div>
-    <div>保護中<b>{{ total.protected }}</b></div>
-    <div>今日或之前要跟進<b>{{ total.due }}</b></div>
+    <div>成交金额<b style="font-size:18px">{{ total.amount_text }}</b></div>
+    <div>保护中<b>{{ total.protected }}</b></div>
+    <div>今日或之前要跟进<b>{{ total.due }}</b></div>
   </div>
-  {% if is_boss %}<h2>按顧問</h2>{% include "admin/consultants/report_table.html" with groups=by_consultant %}{% endif %}
+  {% if is_boss %}<h2>按顾问</h2>{% include "admin/consultants/report_table.html" with groups=by_consultant %}{% endif %}
   <h2>按合作方式</h2>{% include "admin/consultants/report_table.html" with groups=by_coop %}
-  {% if by_partner %}<h2>按合作方名稱</h2>{% include "admin/consultants/report_table.html" with groups=by_partner %}{% endif %}
-  <p class="muted" style="margin-top:20px">想睇個別客戶：<a href="{% url 'admin:consultants_referral_changelist' %}">客戶報備名單</a></p>
+  {% if by_partner %}<h2>按合作方名称</h2>{% include "admin/consultants/report_table.html" with groups=by_partner %}{% endif %}
+  <p class="muted" style="margin-top:20px">查看个别客户：<a href="{% url 'admin:consultants_referral_changelist' %}">客户报备列表</a></p>
 </div>
 {% endblock %}
