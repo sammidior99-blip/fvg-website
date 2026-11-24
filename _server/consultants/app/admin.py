@@ -36,6 +36,8 @@ class ConsultantForm(forms.ModelForm):
         help_text="新帳號必須填；之後留空 = 密碼不變。至少 8 個字元，唔好用太簡單嘅密碼。")
     require_2fa = forms.BooleanField(label="必須開啟雙重驗證", required=False,
         help_text="剔咗之後，顧問下次登入要先用手機驗證 App 設定好，先可以繼續使用後台。")
+    is_admin = forms.BooleanField(label="總權限帳號（老闆／管理員）", required=False,
+        help_text="剔咗之後，呢個帳號同老闆一樣：見到所有顧問嘅客人同業績、可以分派查詢、開顧問帳號。佢自己嘅專屬連結同客人照舊計喺佢名下。")
     reset_2fa = forms.BooleanField(label="重設雙重驗證", required=False,
         help_text="顧問換咗手機又冇晒備用碼時用：清除佢嘅驗證設定，佢下次登入時重新掃 QR 碼。")
 
@@ -49,6 +51,7 @@ class ConsultantForm(forms.ModelForm):
             self.fields["login"].initial = self.instance.user.get_username()
             tf = TwoFactor.objects.filter(user_id=self.instance.user_id).first()
             self.fields["require_2fa"].initial = bool(tf and tf.required)
+            self.fields["is_admin"].initial = self.instance.user.is_superuser
             self.fields["reset_2fa"].help_text += "（現時：" + ("已開啟" if tf and tf.enabled else "未開啟") + "）"
 
     def clean(self):
@@ -96,7 +99,7 @@ class ConsultantAdmin(admin.ModelAdmin):
         if not request.user.is_superuser:
             return (("我的專屬連結及二維碼", {"fields": ("code_info", "link", "qr_big")}), info)
         return (("專屬連結及二維碼", {"fields": ("code_info", "link", "qr_big", "lang")}), info,
-                ("後台帳號（顧問自己登入睇客戶進度）", {"fields": ("login", "password", "require_2fa", "reset_2fa")}),
+                ("後台帳號（顧問自己登入睇客戶進度）", {"fields": ("login", "password", "is_admin", "require_2fa", "reset_2fa")}),
                 ("狀態", {"fields": ("active", "forward_to", "created_at", "updated_at")}))
 
     def get_readonly_fields(self, request, obj=None):
@@ -115,7 +118,11 @@ class ConsultantAdmin(admin.ModelAdmin):
         if not login: return
         U = get_user_model()
         u = obj.user or U(username=login)
-        u.username, u.is_staff, u.is_superuser = login, True, False
+        admin_wanted = bool(form.cleaned_data.get("is_admin"))
+        if not admin_wanted and u.pk and u.pk == request.user.pk:  # never lock yourself out of 總權限
+            admin_wanted = True
+            messages.warning(request, "你唔可以取消自己嘅總權限，請用另一個總權限帳號操作。")
+        u.username, u.is_staff, u.is_superuser = login, True, admin_wanted
         u.is_active = obj.active
         u.first_name = obj.name_en or obj.name_zh
         u.email = obj.email or u.email
@@ -295,6 +302,13 @@ class LeadAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None): return request.user.is_superuser
 
+    def get_changeform_initial_data(self, request):
+        d = super().get_changeform_initial_data(request)
+        if request.user.is_superuser and "consultant" not in d:
+            c = Consultant.objects.filter(user=request.user, active=True).first()
+            if c: d["consultant"] = c.pk
+        return d
+
     def save_model(self, request, obj, form, change):
         if not change:
             if not request.user.is_superuser: obj.consultant = own(request)
@@ -309,7 +323,7 @@ class LeadAdmin(admin.ModelAdmin):
         for m in getattr(form, "claims", []): m.delete()
         by = obj.consultant.name_zh if obj.consultant else "公司"
         for m in getattr(form, "releases", []): L.release(m, by)
-        if not change: N.new_referral(obj, by_company=request.user.is_superuser)
+        if not change: N.new_referral(obj, by_company=request.user.is_superuser and not (obj.consultant and obj.consultant.user_id == request.user.pk))
         elif reassigned: N.assigned(obj)
         sib = L.siblings(obj.phone, obj.student_name, exclude_pk=obj.pk)
         if sib and not change:
