@@ -36,7 +36,7 @@ class ConsultantForm(forms.ModelForm):
     password = forms.CharField(label="设置 / 重设密码", required=False, widget=forms.PasswordInput(render_value=False),
         help_text="新账号必须填；之后留空 = 密码不变。至少 8 个字符，请勿使用过于简单的密码。")
     require_2fa = forms.BooleanField(label="必须开启双重验证", required=False,
-        help_text="勾选后，顾问下次登录须先用手机验证 App 完成设置，才可以继续使用后台。")
+        help_text="勾选后，顾问下次登录须先用微信小程序“腾讯身份验证器”（或其他验证 App）完成设置，才可以继续使用后台。")
     is_admin = forms.BooleanField(label="总权限账号（老板／管理员）", required=False,
         help_text="勾选后，这个账号与老板一样：可查看所有顾问的客户和业绩、可以分派查询、开顾问账号。其本人的专属链接和客户仍归在其名下。")
     reset_2fa = forms.BooleanField(label="重设双重验证", required=False,

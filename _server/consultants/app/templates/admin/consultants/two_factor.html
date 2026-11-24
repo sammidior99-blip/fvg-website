@@ -14,7 +14,7 @@
 {% if error %}<p class="err">{{ error }}</p>{% endif %}
 
 {% if mode == "verify" %}
-  <p>请打开手机上的验证 App（Google Authenticator / Microsoft Authenticator），输入 <b>Summit Brilliance</b> 当前显示的 6 位数字。</p>
+  <p>请打开微信小程序“腾讯身份验证器”（或其他验证 App），输入 <b>Summit Brilliance</b> 当前显示的 6 位数字。</p>
   <p>手机不在身边？可输入一个备用码（每个只能用一次）。</p>
   <form method="post">{% csrf_token %}<input type="hidden" name="next" value="{{ next }}">
     <input name="code" autocomplete="one-time-code" inputmode="numeric" autofocus required>
@@ -24,13 +24,13 @@
 
 {% elif mode == "setup" %}
   {% if required %}<p class="err">公司要求你的账号开启双重验证，完成后才可以继续使用后台。</p>{% endif %}
-  <p>开启后，每次登录除了密码，还需输入手机 App 显示的 6 位数字。即使密码外泄，他人也无法登录。</p>
+  <p>开启后，每次登录除了密码，还需输入“腾讯身份验证器”显示的 6 位数字。即使密码外泄，他人也无法登录。</p>
   <ol>
-    <li>在手机上安装 <b>Google Authenticator</b> 或 <b>Microsoft Authenticator</b>（免费）。</li>
-    <li>在 App 中选择“新增 / 扫描 QR 码”，扫描下方二维码。<br>
+    <li>在微信搜索并打开小程序 <b>腾讯身份验证器</b>（免费，无需安装；也可用 Microsoft Authenticator 等验证 App）。</li>
+    <li>在小程序中点击“+”或“扫码添加”，扫描下方二维码。<br>
       <span class="qr">{{ qr|safe }}</span><br>
       无法扫描时可手动输入密钥：<code>{{ secret }}</code></li>
-    <li>输入 App 显示的 6 位数字：</li>
+    <li>输入小程序显示的 6 位数字：</li>
   </ol>
   <form method="post">{% csrf_token %}
     <input name="code" autocomplete="one-time-code" inputmode="numeric" autofocus required>
