@@ -13,6 +13,7 @@ def media_storage():
     return media
 IMAGE = [FileExtensionValidator(["jpg", "jpeg", "png", "webp"])]
 LANGS = [("en", "English"), ("zh", "繁体中文"), ("cn", "简体中文")]
+KINDS = [("staff", "公司顾问"), ("channel", "推荐渠道")]
 
 
 class Consultant(models.Model):
@@ -36,6 +37,11 @@ class Consultant(models.Model):
     active = models.BooleanField("启用", default=True, help_text="顾问离职时取消勾选。其链接将改为显示下方“转交给”的顾问，或公司联系方式。")
     forward_to = models.ForeignKey("self", verbose_name="停用后转交给", null=True, blank=True, on_delete=models.SET_NULL,
                                    related_name="+", limit_choices_to={"active": True})
+    kind = models.CharField("类型", max_length=10, choices=KINDS, default="staff",
+        help_text="推荐渠道 = 原本是客户、现在介绍朋友来的人（客户转介绍）。权限与公司顾问一样，只看到自己的客户。")
+    parent = models.ForeignKey("self", verbose_name="推荐人（上级）", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="recruits",
+        help_text="由谁介绍加入。推荐人可以查看此人及其再介绍的人所报备的客户（只读，不能修改）；其他顾问看不到。")
     user = models.OneToOneField(settings.AUTH_USER_MODEL, verbose_name="后台登录账号", null=True, blank=True,
                                 on_delete=models.SET_NULL, related_name="consultant")
     created_at = models.DateTimeField("建立时间", auto_now_add=True)
@@ -63,6 +69,19 @@ class Consultant(models.Model):
         if self.active: return self
         if self.forward_to_id and depth < 5: return self.forward_to.current(depth + 1)
         return None
+
+    def downline_ids(self, max_depth=10):
+        """Everyone this person brought in, and everyone they brought in, and so on (not including this person)."""
+        found, level = [], [self.pk]
+        for _ in range(max_depth):
+            level = [pk for pk in Consultant.objects.filter(parent_id__in=level).values_list("pk", flat=True) if pk not in found and pk != self.pk]
+            if not level: break
+            found += level
+        return found
+
+    def team_ids(self):
+        """This person plus their whole downline: whose 客户报备 they may see."""
+        return [self.pk] + self.downline_ids()
 
     def wa_number(self):
         return "".join(ch for ch in (self.whatsapp or self.phone) if ch.isdigit())
@@ -208,3 +227,36 @@ class TwoFactor(models.Model):
 
     def __str__(self):
         return f"{self.user} ({'已开启' if self.enabled else '未开启'})"
+
+
+MSG_KINDS = [("problem", "遇到问题"), ("support", "需要支持"), ("report", "工作汇报"), ("other", "其他")]
+MSG_STATUS = [("open", "待处理"), ("doing", "处理中"), ("done", "已完成")]
+
+
+class Message(models.Model):
+    """请示与反馈: a consultant raises a problem or a request with their 推荐人（上级） or with the company, and gets a reply.
+    (Not to be confused with 客户报备, which registers clients.)"""
+    sender = models.ForeignKey(Consultant, verbose_name="提交人", null=True, on_delete=models.SET_NULL, related_name="sent_messages")
+    to_consultant = models.ForeignKey(Consultant, verbose_name="发给", null=True, blank=True, on_delete=models.SET_NULL,
+                                      related_name="inbox", help_text="空白 = 公司")
+    kind = models.CharField("类别", max_length=10, choices=MSG_KINDS, default="problem")
+    referral = models.ForeignKey("Referral", verbose_name="相关客户", null=True, blank=True, on_delete=models.SET_NULL, related_name="+",
+                                 help_text="可选：与哪位客户有关")
+    subject = models.CharField("主题", max_length=120)
+    content = models.TextField("内容")
+    status = models.CharField("处理状态", max_length=10, choices=MSG_STATUS, default="open")
+    reply = models.TextField("回复", blank=True)
+    replied_by = models.CharField("回复人", max_length=80, blank=True)
+    replied_at = models.DateTimeField("回复时间", null=True, blank=True)
+    created_at = models.DateTimeField("提交时间", auto_now_add=True)
+    updated_at = models.DateTimeField("最后更新", auto_now=True)
+
+    class Meta:
+        verbose_name = verbose_name_plural = "请示与反馈"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.subject
+
+    def to_label(self):
+        return f"{self.to_consultant.name_zh}（推荐人）" if self.to_consultant_id else "公司"

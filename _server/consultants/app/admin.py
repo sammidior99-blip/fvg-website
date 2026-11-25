@@ -7,12 +7,13 @@ from django.contrib.auth.password_validation import validate_password
 from django.db.models import Count
 from django.utils.html import format_html, format_html_join
 
-from .models import PROTECT_DAYS, Consultant, LeadReport, LoginAttempt, Referral, ReferralLog, TwoFactor
+from .models import PROTECT_DAYS, Consultant, LeadReport, LoginAttempt, Message, Referral, ReferralLog, TwoFactor
 
 SITE = "https://summitbrilliance.com"
 GROUP = "销售顾问"
 ACCOUNT_TITLE = "顾问账户设置"  # what a consultant (not the boss) sees for their own 销售顾问 record
-GROUP_PERMS = ["view_referral", "change_referral", "add_referral", "view_consultant", "change_consultant", "view_leadreport"]
+GROUP_PERMS = ["view_referral", "change_referral", "add_referral", "view_consultant", "change_consultant", "view_leadreport",
+               "view_message", "add_message", "change_message"]
 
 
 def own(request):
@@ -57,6 +58,9 @@ class ConsultantForm(forms.ModelForm):
 
     def clean(self):
         d = super().clean()
+        par = d.get("parent")
+        if par and self.instance.pk and (par.pk == self.instance.pk or par.pk in self.instance.downline_ids()):
+            self.add_error("parent", "推荐人不能是此人自己，或此人介绍进来的人。")
         login, pw = (d.get("login") or "").strip(), d.get("password") or ""
         if login:
             U = get_user_model()
@@ -83,12 +87,12 @@ class OwnConsultantForm(forms.ModelForm):
 
 @admin.register(Consultant)
 class ConsultantAdmin(admin.ModelAdmin):
-    list_display = ("name_zh", "name_en", "code", "link", "qr_small", "has_login", "active", "leads")
-    list_filter = ("active",)
+    list_display = ("name_zh", "name_en", "code", "kind", "parent", "link", "qr_small", "has_login", "active", "leads")
+    list_filter = ("active", "kind", ("parent", admin.RelatedOnlyFieldListFilter))
     search_fields = ("name_zh", "name_en", "code", "phone", "email")
 
     def get_queryset(self, request):
-        qs = super().get_queryset(request).annotate(n=Count("referrals")).select_related("user")
+        qs = super().get_queryset(request).annotate(n=Count("referrals")).select_related("user", "parent")
         return qs if request.user.is_superuser else qs.filter(user=request.user)
 
     def get_form(self, request, obj=None, **kw):
@@ -98,16 +102,22 @@ class ConsultantAdmin(admin.ModelAdmin):
     def get_fieldsets(self, request, obj=None):
         info = ("在网站上显示的资料", {"fields": ("name_zh", "name_en", "title_zh", "title_en", "photo", "phone", "whatsapp", "wechat_id", "wechat_qr", "email")})
         if not request.user.is_superuser:
-            return (("我的专属链接及二维码", {"fields": ("code_info", "link", "qr_big")}), info)
+            return (("我的专属链接及二维码", {"fields": ("code_info", "link", "qr_big")}), info,
+                    ("我介绍的人", {"fields": ("team",), "description": "这些人报备的客户，你可以在“客户报备”中查看（只读）。"}))
         return (("专属链接及二维码", {"fields": ("code_info", "link", "qr_big", "lang")}), info,
+                ("推荐关系", {"fields": ("kind", "parent", "team")}),
                 ("后台账号（顾问自行登录查看客户进度）", {"fields": ("login", "password", "is_admin", "require_2fa", "reset_2fa")}),
                 ("状态", {"fields": ("active", "forward_to", "created_at", "updated_at")}))
 
     def get_readonly_fields(self, request, obj=None):
-        return ("code_info", "link", "qr_big", "created_at", "updated_at")
+        return ("code_info", "link", "qr_big", "team", "created_at", "updated_at")
 
     def get_list_display(self, request):
         return self.list_display if request.user.is_superuser else ("name_zh", "code", "link", "qr_small")
+
+    def formfield_for_foreignkey(self, db_field, request, **kw):
+        if db_field.name == "parent": kw["queryset"] = Consultant.objects.filter(active=True)
+        return super().formfield_for_foreignkey(db_field, request, **kw)
 
     def has_add_permission(self, request): return request.user.is_superuser
     def has_delete_permission(self, request, obj=None): return request.user.is_superuser
@@ -161,6 +171,18 @@ class ConsultantAdmin(admin.ModelAdmin):
         if obj.user_id != u.pk:
             obj.user = u
             obj.save(update_fields=["user"])
+
+    @admin.display(description="介绍的人（下线）")
+    def team(self, obj):
+        if not obj.pk: return "—"
+        ids = obj.downline_ids()
+        if not ids: return "暂无"
+        people = {c.pk: c for c in Consultant.objects.filter(pk__in=ids).annotate(n=Count("referrals"))}
+        def line(c, depth):
+            via = "" if c.parent_id == obj.pk else f"（经 {people[c.parent_id].name_zh} 介绍）" if c.parent_id in people else ""
+            return (c.name_zh, c.code, via, c.n, "" if c.active else "（已停用）")
+        rows = [line(people[i], 0) for i in ids if i in people]
+        return format_html_join("", "<div>{}（{}）{}：客户 {} 位{}</div>", rows)
 
     @admin.display(description="链接代号")
     def code_info(self, obj):
@@ -242,7 +264,8 @@ class LeadForm(forms.ModelForm):
                     raise forms.ValidationError(f"你已于 {timezone.localtime(m.created_at):%Y-%m-%d} 报备过该服务对象，请在“客户报备”列表中更新其进度。")
                 u = m.protected_until()
                 until = "（已签约，永久保护）" if u == "permanent" else f"，保护期至 {u:%Y-%m-%d}"
-                who = f"{m.consultant.name_zh}（{m.consultant.code}）" if self.request.user.is_superuser else "其他顾问"
+                team = Consultant.objects.get(pk=mine.pk).downline_ids() if mine and not self.request.user.is_superuser else []
+                who = f"{m.consultant.name_zh}（{m.consultant.code}）" if self.request.user.is_superuser or m.consultant_id in team else "其他顾问"
                 raise forms.ValidationError(f"报备不成功：该服务对象已由{who}于 {timezone.localtime(m.created_at):%Y-%m-%d} 报备{until}。以第一个报备为准。")
             (self.claims if not m.consultant_id else self.releases).append(m)
         return d
@@ -277,6 +300,24 @@ class DueFilter(admin.SimpleListFilter):
         return qs
 
 
+class TeamFilter(admin.SimpleListFilter):
+    """For a consultant who introduced others: their own clients / clients of the people they introduced."""
+    title, parameter_name = "归属", "team"
+
+    def lookups(self, request, model_admin):
+        c = own(request)
+        out = [("mine", "我的客户"), ("down", "我介绍的人的客户")]
+        if c: out += [(str(p.pk), f"{p.name_zh}（{p.code}）") for p in Consultant.objects.filter(pk__in=c.downline_ids())]
+        return out
+
+    def queryset(self, request, qs):
+        c, v = own(request), self.value()
+        if not c or not v: return qs
+        if v == "mine": return qs.filter(consultant=c)
+        if v == "down": return qs.exclude(consultant=c)
+        return qs.filter(consultant_id=v) if v.isdigit() and int(v) in c.downline_ids() else qs
+
+
 @admin.register(Referral)
 class LeadAdmin(admin.ModelAdmin):
     form = LeadForm
@@ -297,14 +338,24 @@ class LeadAdmin(admin.ModelAdmin):
         qs = super().get_queryset(request).select_related("consultant")
         if request.user.is_superuser: return qs
         c = own(request)
-        return qs.filter(consultant=c).exclude(status="released") if c else qs.none()
+        return qs.filter(consultant_id__in=c.team_ids()).exclude(status="released") if c else qs.none()
 
     def get_list_display(self, request):
         if request.user.is_superuser: return self.list_display
+        c = own(request)
+        if c and c.downline_ids(): return self.list_display  # 报备顾问 column shows whose client it is
         return tuple(x for x in self.list_display if x != "consultant")
 
     def get_list_filter(self, request):
-        return self.list_filter if request.user.is_superuser else ("status", DueFilter, "coop_type", ProtectionFilter)
+        if request.user.is_superuser: return self.list_filter
+        c = own(request)
+        return ((TeamFilter,) if c and c.downline_ids() else ()) + ("status", DueFilter, "coop_type", ProtectionFilter)
+
+    def has_change_permission(self, request, obj=None):
+        if obj is not None and not request.user.is_superuser:
+            c = own(request)
+            if not c or obj.consultant_id != c.pk: return False  # clients of people they introduced: view only
+        return super().has_change_permission(request, obj)
 
     def get_fieldsets(self, request, obj=None):
         fs = [("服务对象（学生）", {"fields": ("student_name", "gender", "id_last4", "grade", "school")}),
@@ -493,7 +544,7 @@ class LeadReportAdmin(admin.ModelAdmin):
         start = period_start(p)
         if start: qs = qs.filter(created_at__date__gte=start)
         c = own(request)
-        if not request.user.is_superuser: qs = qs.filter(consultant=c) if c else qs.none()
+        if not request.user.is_superuser: qs = qs.filter(consultant_id__in=c.team_ids()) if c else qs.none()
         rows = list(qs)
         statuses = [(k, v) for k, v in Referral._meta.get_field("status").choices if k != "released"]
 
@@ -507,11 +558,149 @@ class LeadReportAdmin(admin.ModelAdmin):
                "by_consultant": group(lambda r: r.consultant, lambda k: f"{k.name_zh}（{k.code}）" if k else "未分派"),
                "by_coop": group(lambda r: r.coop_type, lambda k: coop_label.get(k, k)),
                "by_partner": [x for x in group(lambda r: (r.coop_type, r.coop_name.strip()), lambda k: f"{coop_label.get(k[0], k[0])}：{k[1]}") if not x[0].endswith("：")][:30],
-               "is_boss": request.user.is_superuser, "protect_days": PROTECT_DAYS}
+               "is_boss": request.user.is_superuser or bool(c and c.downline_ids()), "protect_days": PROTECT_DAYS}
         if request.GET.get("export") == "xlsx":
             from .export import report_xlsx
             return report_xlsx(request, ctx, rows, dict(PERIODS)[p], c)
         return TemplateResponse(request, "admin/consultants/report.html", ctx)
+
+
+# ================================================================ 请示与反馈 (consultant -> 推荐人 / company)
+def me_of(request):
+    """The consultant record of the logged-in user, also for an admin who is a consultant."""
+    return Consultant.objects.filter(user=request.user).first() if request.user.is_authenticated else None
+
+
+class MessageForm(forms.ModelForm):
+    send_to = forms.ChoiceField(label="发给", choices=[("company", "公司")])
+
+    class Meta:
+        model = Message
+        fields = ("kind", "referral", "subject", "content")
+
+    def __init__(self, *a, request=None, **k):
+        super().__init__(*a, **k)
+        me = me_of(request) if request else None
+        if self.instance.pk: self.fields.pop("send_to", None)  # already sent: the addressee does not change
+        if "send_to" in self.fields:
+            ch = [("company", "公司")]
+            if me and me.parent_id and me.parent.active: ch.insert(0, (str(me.parent_id), f"我的推荐人：{me.parent.name_zh}（{me.parent.code}）"))
+            self.fields["send_to"].choices = ch
+        if "referral" in self.fields:
+            self.fields["referral"].queryset = (Referral.objects.filter(consultant=me).exclude(status="released") if me and not request.user.is_superuser
+                                                else Referral.objects.all())
+
+
+class InboxFilter(admin.SimpleListFilter):
+    title, parameter_name = "范围", "box"
+
+    def lookups(self, request, model_admin): return (("in", "发给我的"), ("out", "我提交的"))
+
+    def queryset(self, request, qs):
+        me = me_of(request)
+        if self.value() == "in": return qs.filter(to_consultant=me) if me else qs.filter(to_consultant__isnull=True)
+        if self.value() == "out": return qs.filter(sender=me) if me else qs.none()
+        return qs
+
+
+@admin.register(Message)
+class MessageAdmin(admin.ModelAdmin):
+    list_display = ("when", "sender", "to_col", "kind", "subject", "status_col", "replied_at")
+    list_display_links = ("when", "subject")
+    list_filter = (InboxFilter, "status", "kind")
+    search_fields = ("subject", "content", "reply", "sender__name_zh")
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request).select_related("sender", "to_consultant", "referral")
+        if request.user.is_superuser: return qs
+        me = me_of(request)
+        from django.db.models import Q
+        return qs.filter(Q(sender=me) | Q(to_consultant=me)) if me else qs.none()
+
+    def has_add_permission(self, request): return bool(me_of(request)) and super().has_add_permission(request)
+    def has_delete_permission(self, request, obj=None): return request.user.is_superuser
+
+    def has_change_permission(self, request, obj=None):
+        if obj is not None and not request.user.is_superuser:
+            me = me_of(request)
+            if not me: return False
+            if obj.to_consultant_id == me.pk: return super().has_change_permission(request, obj)  # the 推荐人 replies
+            if obj.sender_id == me.pk and obj.status == "open" and not obj.reply: return super().has_change_permission(request, obj)  # still editable
+            return False
+        return super().has_change_permission(request, obj)
+
+    def _role(self, request, obj):
+        """'new', 'sender' (may still edit), 'answer' (推荐人 or company replies) or 'view'."""
+        if obj is None: return "new"
+        me = me_of(request)
+        if request.user.is_superuser or (me and obj.to_consultant_id == me.pk): return "answer"
+        if me and obj.sender_id == me.pk and obj.status == "open" and not obj.reply: return "sender"
+        return "view"
+
+    def get_form(self, request, obj=None, **kw):
+        role = self._role(request, obj)
+        if role in ("new", "sender"):
+            kw["form"] = MessageForm
+            if role == "sender": kw["fields"] = ("kind", "referral", "subject", "content")
+        else:
+            kw["form"] = forms.ModelForm
+            kw["fields"] = ("status", "reply") if role == "answer" else ()
+        Form = super().get_form(request, obj, **kw)
+        if role not in ("new", "sender"): return Form
+
+        class F(Form):
+            def __init__(s, *a, **k): super().__init__(*a, request=request, **k)
+        return F
+
+    def get_fieldsets(self, request, obj=None):
+        role = self._role(request, obj)
+        if role == "new":
+            return ((None, {"fields": ("send_to", "kind", "referral", "subject", "content"),
+                            "description": "遇到问题、需要支持或要向上级汇报，都可以在这里提交。对方回复后会通知你。"}),)
+        ask = ("kind", "referral", "subject", "content") if role == "sender" else ("kind", "lead_col", "subject", "content_col")
+        return (("请示内容", {"fields": ("sender", "to_col", "when") + ask}),
+                ("回复", {"fields": ("status", "reply", "replied_by", "replied_at") if role == "answer" else ("status_col", "reply_col", "replied_by", "replied_at")}))
+
+    def get_readonly_fields(self, request, obj=None):
+        if obj is None: return ()
+        base = ("sender", "to_col", "when", "replied_by", "replied_at", "lead_col", "content_col", "status_col", "reply_col")
+        return base + (() if self._role(request, obj) == "sender" else ("kind", "subject"))
+
+    def save_model(self, request, obj, form, change):
+        if not change:
+            me = me_of(request)
+            obj.sender = me
+            st = form.cleaned_data.get("send_to")
+            obj.to_consultant = Consultant.objects.filter(pk=st).first() if st and st.isdigit() and me and str(me.parent_id) == st else None
+        replied = change and "reply" in form.changed_data and obj.reply.strip()
+        if replied:
+            me = me_of(request)
+            obj.replied_by = me.name_zh if me else (request.user.get_full_name() or request.user.get_username() or "公司")
+            obj.replied_at = timezone.now()
+            if obj.status == "open": obj.status = "done"
+        super().save_model(request, obj, form, change)
+        if not change: N.new_message(obj)
+        elif replied: N.message_replied(obj)
+
+    @admin.display(description="提交时间", ordering="created_at")
+    def when(self, obj): return timezone.localtime(obj.created_at).strftime("%Y-%m-%d %H:%M") if obj.pk else "—"
+
+    @admin.display(description="发给")
+    def to_col(self, obj): return obj.to_label()
+
+    @admin.display(description="处理状态", ordering="status")
+    def status_col(self, obj):
+        color = {"open": "#c62828", "doing": "#b26a00", "done": "#2e7d32"}.get(obj.status, "inherit")
+        return format_html('<b style="color:{}">{}</b>', color, obj.get_status_display())
+
+    @admin.display(description="相关客户")
+    def lead_col(self, obj): return obj.referral.student_name if obj.referral else "—"
+
+    @admin.display(description="内容")
+    def content_col(self, obj): return format_html('<div style="white-space:pre-wrap">{}</div>', obj.content)
+
+    @admin.display(description="回复")
+    def reply_col(self, obj): return format_html('<div style="white-space:pre-wrap">{}</div>', obj.reply) if obj.reply else "（尚未回复）"
 
 
 # ================================================================ login security

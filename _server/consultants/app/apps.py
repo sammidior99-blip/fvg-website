@@ -43,6 +43,9 @@ class ConsultantsConfig(AppConfig):
         user_login_failed.connect(on_login_failed, weak=False, dispatch_uid="fvg-login-failed")
         user_logged_in.connect(on_logged_in, weak=False, dispatch_uid="fvg-logged-in")
 
+        from django.db.models.signals import post_migrate
+        post_migrate.connect(sync_group_permissions, sender=self, weak=False, dispatch_uid="fvg-group-perms")
+
         try:
             self._extend_enquiry_admin(apps.get_model("pages", "Enquiry"))
         except Exception:
@@ -102,3 +105,15 @@ class ConsultantsConfig(AppConfig):
             return actions
 
         ma.get_actions = get_actions
+
+
+def sync_group_permissions(**kw):
+    """After migrate: the 销售顾问 group gets the permissions of new features too (e.g. 请示与反馈)."""
+    try:
+        from django.contrib.auth.models import Group, Permission
+        from .admin import GROUP, GROUP_PERMS
+        g = Group.objects.filter(name=GROUP).first()
+        if g: g.permissions.set(Permission.objects.filter(content_type__app_label="consultants", codename__in=GROUP_PERMS))
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception("could not update the consultant group's permissions")

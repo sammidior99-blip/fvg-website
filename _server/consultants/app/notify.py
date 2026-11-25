@@ -185,3 +185,30 @@ def send_digest(today=None, dry_run=False, stdout=None):
     if html and company() and not dry_run:
         sent += send(company(), f"【每日跟进总表 {today:%m-%d}】逾期 {total_over} · 未分派 {len(unassigned)}", html, sync=True)
     return sent
+
+
+# ------------------------------------------------------------------ 请示与反馈
+def msg_url(m): return f"{site()}/admin/consultants/message/{m.pk}/change/"
+
+
+def _msg_rows(m):
+    return [("提交人", f"{m.sender.name_zh}（{m.sender.code}）" if m.sender else "—"), ("发给", m.to_label()), ("类别", m.get_kind_display()),
+            ("主题", m.subject), ("内容", m.content), ("相关客户", m.referral.student_name if m.referral else ""),
+            ("回复", m.reply), ("处理状态", m.get_status_display()), ("打开", msg_url(m))]
+
+
+def new_message(m):
+    """A consultant sent a 请示与反馈: tell their 推荐人, or the company."""
+    try:
+        to = [consultant_email(m.to_consultant)] if m.to_consultant_id else company()
+        send(to, f"【请示与反馈】{m.get_kind_display()}：{m.subject}", _msg_rows(m), "有一条新的请示与反馈，请登录后台查看并回复。")
+    except Exception:
+        log.exception("new_message alert failed")
+
+
+def message_replied(m):
+    """The 推荐人 or the company replied: tell the consultant who asked."""
+    try:
+        send([consultant_email(m.sender)], f"【已回复】{m.subject}", _msg_rows(m), f"{m.sender.name_zh if m.sender else ''} 你好，你的请示与反馈有回复。")
+    except Exception:
+        log.exception("message_replied alert failed")
