@@ -7,7 +7,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.db.models import Count
 from django.utils.html import format_html, format_html_join
 
-from .models import PROTECT_DAYS, Application, Consultant, LeadReport, LoginAttempt, Message, Referral, ReferralLog, TwoFactor
+from .models import PROTECT_DAYS, Application, Consultant, TeamTree, LeadReport, LoginAttempt, Message, Referral, ReferralLog, TwoFactor
 
 SITE = "https://summitbrilliance.com"
 GROUP = "销售顾问"
@@ -835,6 +835,24 @@ class ApplicationAdmin(admin.ModelAdmin):
 
 
 admin.site.register(Application, ApplicationAdmin)
+
+
+# ================================================================ 关系图 (company only)
+@admin.register(TeamTree)
+class TeamTreeAdmin(admin.ModelAdmin):
+    def has_module_permission(self, request): return request.user.is_superuser
+    def has_view_permission(self, request, obj=None): return request.user.is_superuser
+    def has_add_permission(self, request): return False
+    def has_change_permission(self, request, obj=None): return False
+    def has_delete_permission(self, request, obj=None): return False
+
+    def changelist_view(self, request, extra_context=None):
+        from django.core.exceptions import PermissionDenied
+        if not request.user.is_superuser: raise PermissionDenied
+        from .tree import build
+        tree, totals = build()
+        ctx = {**self.admin_site.each_context(request), "title": "关系图", "opts": self.model._meta, "tree": tree, "totals": totals}
+        return TemplateResponse(request, "admin/consultants/tree.html", ctx)
 
 
 # ================================================================ login security

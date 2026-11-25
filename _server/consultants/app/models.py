@@ -291,3 +291,10 @@ class Application(models.Model):
 
     def __str__(self):
         return f"{self.name_zh}（{self.get_status_display()}）"
+
+
+class TeamTree(Consultant):
+    """关系图: the company's tree of consultants → clients → people they introduced → their clients."""
+    class Meta:
+        proxy = True
+        verbose_name = verbose_name_plural = "关系图"

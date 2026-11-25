@@ -1,0 +1,55 @@
+{% extends "admin/base_site.html" %}
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">首页</a> › 销售顾问 › 关系图</div>{% endblock %}
+{% block content %}
+<style>
+.fvt-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 14px}
+.fvt-bar input{min-width:240px;padding:6px 10px}
+.fvt-bar button{padding:6px 12px;cursor:pointer}
+.fvt-sum{color:var(--body-quiet-color,#666);margin:0 0 12px}
+.fvt ul{list-style:none;margin:0;padding-left:22px;border-left:1px dashed var(--hairline-color,#ccc)}
+.fvt>ul{padding-left:0;border-left:0}
+.fvt li{margin:4px 0;line-height:1.7;list-style:none}
+.fvt summary{cursor:pointer;padding:3px 0}
+.fvt li.fvt-p>details>summary{font-size:14px}
+.fvt-tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:10px;margin-right:6px;color:#fff;vertical-align:1px}
+.fvt-staff{background:#0F2340}.fvt-channel{background:#9A6B0A}.fvt-none{background:#757575}
+.fvt-st{display:inline-block;font-size:11px;padding:0 7px;border-radius:10px;color:#fff;margin-left:4px}
+.fvt-m{color:var(--body-quiet-color,#667);font-size:12.5px}
+.fvt-ico{color:#9A6B0A;font-size:9px;margin-right:6px;vertical-align:2px}
+.fvt-off{color:#c62828;font-size:12px}
+.fvt-empty{color:var(--body-quiet-color,#999);font-size:12.5px}
+.fvt code{font-size:12px}
+.fvt .fvt-hide{display:none}
+.fvt mark{background:#ffe58f;padding:0}
+</style>
+<div class="fvt-bar">
+  <input type="search" id="fvt-q" placeholder="搜索顾问、客户姓名或电话">
+  <button type="button" id="fvt-open">全部展开</button>
+  <button type="button" id="fvt-close">只看顾问</button>
+</div>
+<p class="fvt-sum">顾问 {{ totals.people }} 位（其中推荐渠道 {{ totals.channel }} 位） · 客户 {{ totals.leads }} 位 · 已签约 {{ totals.signed }} 位。
+点击客户姓名可查看客户资料、进度和报备顾问；点击顾问姓名可查看顾问资料。客户成为推荐渠道后，其介绍的客户会显示在该客户下面。</p>
+<div class="fvt" id="fvt"><ul>{{ tree }}</ul></div>
+<script>
+(function () {
+  var root = document.getElementById('fvt'), q = document.getElementById('fvt-q');
+  function lis() { return root.querySelectorAll('li'); }
+  function own(li) { var s = li.querySelector(':scope>details>summary'); return (s || li).textContent; }
+  q.addEventListener('input', function () {
+    var v = q.value.trim().toLowerCase();
+    var all = Array.prototype.slice.call(lis()).reverse();   // children first
+    all.forEach(function (li) {
+      if (!v) { li.classList.remove('fvt-hide'); return; }
+      var hit = own(li).toLowerCase().indexOf(v) >= 0 && !li.classList.contains('fvt-empty');
+      var child = li.querySelector('li:not(.fvt-hide)');
+      li.classList.toggle('fvt-hide', !(hit || child));
+      if (child) { var d = li.querySelector(':scope>details'); if (d) d.open = true; }
+    });
+  });
+  document.getElementById('fvt-open').onclick = function () { root.querySelectorAll('details').forEach(function (d) { d.open = true; }); };
+  document.getElementById('fvt-close').onclick = function () {
+    root.querySelectorAll('li.fvt-p>details').forEach(function (d) { d.open = !!d.querySelector('li.fvt-p'); });
+  };
+})();
+</script>
+{% endblock %}
