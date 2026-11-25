@@ -529,6 +529,14 @@ def summarise(rows):
     s["signed"] = s["by"].get("signed", 0)
     s["rate"] = f"{s['signed'] * 100 / active:.0f}%" if active else "—"
     s["amount_text"] = "、".join(f"{c} {v:,.0f}" for c, v in sorted(s["amounts"].items())) or "—"
+    # for the dashboard's cards and bars
+    s["rate_num"] = round(s["signed"] * 100 / active) if active else 0
+    s["active_count"] = sum(s["by"].get(k, 0) for k in ("new", "contacted", "meeting", "proposal"))
+    s["amount_list"] = [(c, f"{v:,.0f}") for c, v in sorted(s["amounts"].items())]
+    stages = [(k, v, s["by"].get(k, 0)) for k, v in Referral._meta.get_field("status").choices if k != "released"]
+    top = max([n for _, _, n in stages] + [1])
+    # (key, label, count, share of all leads %, bar length relative to the biggest stage %)
+    s["stages"] = [(k, v, n, round(n * 100 / s["total"]) if s["total"] else 0, round(n * 100 / top, 1)) for k, v, n in stages]
     return s
 
 

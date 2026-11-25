@@ -1,34 +1,124 @@
 {% extends "admin/base_site.html" %}
 {% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">首页</a> › 销售顾问 › 业绩总览</div>{% endblock %}
+{% block content_title %}{% endblock %}
 {% block content %}
 <style>
-.fv-rep h2{margin:28px 0 10px;font-size:17px}
-.fv-rep table{border-collapse:collapse;width:100%;font-size:14px}
-.fv-rep th,.fv-rep td{padding:8px 10px;border-bottom:1px solid var(--hairline-color,#e5e5e5);text-align:right;white-space:nowrap}
-.fv-rep th:first-child,.fv-rep td:first-child{text-align:left}
-.fv-rep thead th{background:var(--darkened-bg,#f6f6f6);font-weight:700}
-.fv-rep .big{display:flex;flex-wrap:wrap;gap:12px;margin:12px 0 8px}
-.fv-rep .big div{border:1px solid var(--hairline-color,#e5e5e5);border-radius:6px;padding:12px 16px;min-width:130px}
-.fv-rep .big b{display:block;font-size:24px;margin-top:4px}
-.fv-rep .tabs a{display:inline-block;padding:6px 12px;margin-right:6px;border:1px solid var(--hairline-color,#ccc);border-radius:4px;text-decoration:none}
-.fv-rep .tabs a.on{background:var(--primary,#417690);color:#fff;border-color:transparent}
-.fv-rep .muted{color:var(--body-quiet-color,#666);font-size:13px}
-.fv-scroll{overflow-x:auto}
+.fv-rep{--fv-card:var(--body-bg,#fff);--fv-line:var(--hairline-color,#e8e8e8);--fv-soft:var(--darkened-bg,#f6f7f9);--fv-quiet:var(--body-quiet-color,#777);
+  --fv-ink:var(--body-fg,#222);--fv-accent:#2f6f8f;--fv-green:#2e9d6a;--fv-amber:#d98a1c;--fv-grey:#a9b0b8;max-width:1280px}
+.fv-rep *{box-sizing:border-box}
+.fv-seg a,.fv-btn,.fv-seg a:hover,.fv-btn:hover{text-decoration:none!important}
+.fv-tbl tbody tr{background:none!important}
+/* header */
+.fv-head{display:flex;flex-wrap:wrap;align-items:center;gap:14px 20px;margin:4px 0 6px}
+.fv-head h1{margin:0;font-size:24px;font-weight:600;letter-spacing:.5px;color:var(--fv-ink)}
+.fv-head .sp{flex:1}
+.fv-seg{display:inline-flex;background:var(--fv-soft);border:1px solid var(--fv-line);border-radius:10px;padding:3px}
+.fv-seg a{padding:6px 16px;border-radius:7px;text-decoration:none;color:var(--fv-quiet);font-size:14px;font-weight:500}
+.fv-seg a:hover{color:var(--fv-ink)}
+.fv-seg a.on{background:var(--fv-card);color:var(--fv-ink);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.fv-btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border:1px solid var(--fv-line);border-radius:8px;text-decoration:none;
+  font-size:14px;color:var(--fv-ink)!important;background:var(--fv-card)}
+.fv-btn:hover{border-color:var(--fv-accent)}
+.fv-note{color:var(--fv-quiet);font-size:12.5px;margin:0 0 18px;line-height:1.6}
+/* cards */
+.fv-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.fv-card{background:var(--fv-card);border:1px solid var(--fv-line);border-radius:14px;padding:18px 20px;box-shadow:0 1px 2px rgba(0,0,0,.03)}
+.fv-card .lbl{font-size:13px;color:var(--fv-quiet);display:flex;align-items:center;gap:6px}
+.fv-card .num{font-size:34px;font-weight:700;line-height:1.15;margin-top:8px;color:var(--fv-ink);font-variant-numeric:tabular-nums}
+.fv-card .sub{font-size:12.5px;color:var(--fv-quiet);margin-top:6px}
+.fv-dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.fv-rate{display:flex;align-items:center;gap:16px}
+.fv-ring{--v:0;width:64px;height:64px;border-radius:50%;flex:none;
+  background:conic-gradient(var(--fv-green) calc(var(--v)*1%),var(--fv-soft) 0);display:grid;place-items:center}
+.fv-ring::after{content:"";width:46px;height:46px;border-radius:50%;background:var(--fv-card)}
+.fv-money{grid-column:span 2}
+.fv-money .rows{display:flex;flex-wrap:wrap;gap:6px 28px;margin-top:8px}
+.fv-money .cur{font-size:12px;font-weight:600;color:var(--fv-accent);letter-spacing:.5px;margin-right:6px}
+.fv-money .amt{font-size:28px;font-weight:700;color:var(--fv-ink);font-variant-numeric:tabular-nums}
+.fv-alert{display:flex;align-items:center;justify-content:space-between}
+.fv-alert .num{margin-top:4px}
+.fv-alert.hot{border-color:rgba(217,138,28,.55);background:linear-gradient(0deg,rgba(217,138,28,.08),rgba(217,138,28,.08)),var(--fv-card)}
+.fv-alert.hot .num{color:var(--fv-amber)}
+.fv-alert a{font-size:13px}
+/* panels */
+.fv-panel{background:var(--fv-card);border:1px solid var(--fv-line);border-radius:14px;padding:18px 20px;margin-top:18px}
+.fv-panel h2{margin:0 0 14px;font-size:16px;font-weight:600;color:var(--fv-ink);background:none;padding:0;text-transform:none;letter-spacing:0}
+.fv-panel h2 small{font-weight:400;color:var(--fv-quiet);font-size:12.5px;margin-left:8px}
+.fv-two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px}
+.fv-two .fv-panel{margin-top:18px}
+/* stage bars */
+.fv-stage{display:grid;grid-template-columns:96px 1fr 64px;align-items:center;gap:12px;margin:9px 0;font-size:13.5px}
+.fv-stage .bar{height:12px;background:var(--fv-soft);border-radius:6px;overflow:hidden}
+.fv-stage .bar i{display:block;height:100%;border-radius:6px}
+.fv-stage .n{text-align:right;font-variant-numeric:tabular-nums;color:var(--fv-ink)}
+.fv-stage .n small{color:var(--fv-quiet);margin-left:4px}
+.c-new{background:#a9c7da}.c-contacted{background:#7fb0cc}.c-meeting{background:#4f93b8}.c-proposal{background:#2f6f8f}
+.c-signed{background:#2e9d6a}.c-closed{background:#c9ced4}
+/* tables */
+.fv-tbl{overflow-x:auto}
+.fv-tbl table{border-collapse:separate;border-spacing:0;width:100%;font-size:13.5px;border:none}
+.fv-tbl th,.fv-tbl td{padding:11px 12px;border-bottom:1px solid var(--fv-line);text-align:right;white-space:nowrap;vertical-align:middle;background:none}
+.fv-tbl thead th{font-size:12px;font-weight:600;color:var(--fv-quiet);background:none;border-bottom:1px solid var(--fv-line);text-transform:none}
+.fv-tbl tbody tr:last-child td{border-bottom:none}
+.fv-tbl tbody tr:hover td{background:var(--fv-soft)}
+.fv-tbl th:first-child,.fv-tbl td:first-child{text-align:left}
+.fv-tbl td.name{font-weight:600;color:var(--fv-ink)}
+.fv-tbl td.strong{font-weight:700;color:var(--fv-ink)}
+.fv-tbl .zero{color:var(--fv-grey)}
+.fv-tbl .mix{text-align:left;min-width:220px}
+.fv-mix{display:flex;height:20px;border-radius:5px;overflow:hidden;background:var(--fv-soft)}
+.fv-mix span{display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;font-weight:600;min-width:0;overflow:hidden}
+.fv-mix span.c-new,.fv-mix span.c-closed{color:#2b3a44}
+.fv-legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--fv-quiet);margin:-4px 0 12px}
+.fv-legend span{display:inline-flex;align-items:center;gap:5px}
+.fv-legend i{width:10px;height:10px;border-radius:3px;display:inline-block}
+.fv-pct{display:inline-flex;align-items:center;gap:8px}
+.fv-pct .bar{width:60px;height:6px;border-radius:3px;background:var(--fv-soft);overflow:hidden}
+.fv-pct .bar i{display:block;height:100%;background:var(--fv-green)}
+.fv-amts div{line-height:1.5}
+.fv-amts .cur{font-size:11px;color:var(--fv-quiet);margin-right:4px;font-weight:600}
+.fv-badge{display:inline-block;min-width:22px;padding:1px 7px;border-radius:10px;font-weight:600;font-size:12.5px;text-align:center}
+.fv-badge.hot{background:rgba(217,138,28,.15);color:var(--fv-amber)}
+.fv-foot{margin-top:18px;color:var(--fv-quiet);font-size:13px}
+@media (max-width:1100px){.fv-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.fv-two{grid-template-columns:1fr}}
+@media (max-width:640px){.fv-grid{grid-template-columns:1fr}.fv-money{grid-column:auto}}
 </style>
 <div class="fv-rep">
-  <p class="tabs">{% for k, v in periods %}<a href="?p={{ k }}" class="{% if k == p %}on{% endif %}">{{ v }}</a>{% endfor %}<a href="?p={{ p }}&amp;export=xlsx" style="float:right">⬇ 导出 Excel</a></p>
-  <p class="muted">按“报备时间”计算。成交金额只计“已签约”的客户。保护期：最后跟进后 {{ protect_days }} 日；已签约永久保护。</p>
-  <div class="big">
-    <div>报备客户<b>{{ total.total }}</b></div>
-    <div>已签约<b>{{ total.signed }}</b></div>
-    <div>成交率<b>{{ total.rate }}</b></div>
-    <div>成交金额<b style="font-size:18px">{{ total.amount_text }}</b></div>
-    <div>保护中<b>{{ total.protected }}</b></div>
-    <div>今日或之前要跟进<b>{{ total.due }}</b></div>
+  <div class="fv-head">
+    <h1>业绩总览</h1>
+    <div class="fv-seg">{% for k, v in periods %}<a href="?p={{ k }}" class="{% if k == p %}on{% endif %}">{{ v }}</a>{% endfor %}</div>
+    <div class="sp"></div>
+    <a class="fv-btn" href="?p={{ p }}&amp;export=xlsx">⬇ 导出 Excel</a>
   </div>
-  {% if is_boss %}<h2>按顾问</h2>{% include "admin/consultants/report_table.html" with groups=by_consultant %}{% endif %}
-  <h2>按合作方式</h2>{% include "admin/consultants/report_table.html" with groups=by_coop %}
-  {% if by_partner %}<h2>按合作方名称</h2>{% include "admin/consultants/report_table.html" with groups=by_partner %}{% endif %}
-  <p class="muted" style="margin-top:20px">查看个别客户：<a href="{% url 'admin:consultants_referral_changelist' %}">客户报备列表</a></p>
+  <p class="fv-note">按“报备时间”计算。成交金额只计“已签约”的客户。保护期：最后跟进后 {{ protect_days }} 日；已签约永久保护。</p>
+
+  <div class="fv-grid">
+    <div class="fv-card"><div class="lbl"><span class="fv-dot" style="background:#4f93b8"></span>报备客户</div><div class="num">{{ total.total }}</div><div class="sub">这段时间新报备的客户</div></div>
+    <div class="fv-card"><div class="lbl"><span class="fv-dot" style="background:var(--fv-green)"></span>已签约</div><div class="num">{{ total.signed }}</div><div class="sub">已签约的客户人数</div></div>
+    <div class="fv-card"><div class="lbl">成交率</div>
+      <div class="fv-rate"><div class="num">{{ total.rate }}</div><div class="fv-ring" style="--v:{{ total.rate_num }}"></div></div>
+      <div class="sub">已签约 ÷ 报备（不计已释放）</div></div>
+    <div class="fv-card fv-alert{% if total.due %} hot{% endif %}"><div><div class="lbl">今日或之前要跟进</div><div class="num">{{ total.due }}</div>
+      <div class="sub">{% if total.due %}<a href="{% url 'admin:consultants_referral_changelist' %}">去客户报备列表跟进 →</a>{% else %}暂时没有逾期跟进{% endif %}</div></div></div>
+    <div class="fv-card fv-money"><div class="lbl">成交金额</div>
+      <div class="rows">{% for c, v in total.amount_list %}<div><span class="cur">{{ c }}</span><span class="amt">{{ v }}</span></div>{% empty %}<div class="amt">—</div>{% endfor %}</div>
+      <div class="sub">不同货币分开计算</div></div>
+    <div class="fv-card fv-alert"><div><div class="lbl">保护中</div><div class="num">{{ total.protected }}</div><div class="sub">别人不能重新报备的客户</div></div></div>
+    <div class="fv-card fv-alert"><div><div class="lbl">跟进中</div><div class="num">{{ total.active_count }}</div><div class="sub">未签约、未暂停的客户</div></div></div>
+  </div>
+
+  <div class="fv-panel">
+    <h2>客户进度分布<small>每个客户目前所在的阶段</small></h2>
+    {% for k, v, n, share, w in total.stages %}
+    <div class="fv-stage"><div>{{ v }}</div><div class="bar"><i class="c-{{ k }}" style="width:{{ w }}%"></i></div><div class="n">{{ n }}<small>{{ share }}%</small></div></div>
+    {% endfor %}
+  </div>
+
+  {% if is_boss %}
+  <div class="fv-panel"><h2>按顾问</h2>{% include "admin/consultants/report_table.html" with groups=by_consultant %}</div>
+  {% endif %}
+  <div class="fv-panel"><h2>按合作方式</h2>{% include "admin/consultants/report_table.html" with groups=by_coop %}</div>
+  {% if by_partner %}<div class="fv-panel"><h2>按合作方名称</h2>{% include "admin/consultants/report_table.html" with groups=by_partner %}</div>{% endif %}
+  <p class="fv-foot">查看个别客户：<a href="{% url 'admin:consultants_referral_changelist' %}">客户报备列表</a></p>
 </div>
 {% endblock %}
