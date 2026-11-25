@@ -710,10 +710,27 @@ class ApplicationForm(forms.ModelForm):
 
     class Meta:
         model = Application
-        fields = ("name_zh", "phone", "wechat_id", "email", "note", "reject_reason")
+        fields = ("referral", "name_zh", "phone", "wechat_id", "email", "note", "reject_reason")
+
+    def __init__(self, *a, request=None, **k):
+        super().__init__(*a, **k)
+        for f in ("name_zh", "phone"):
+            if f in self.fields: self.fields[f].required = False  # may come from the chosen client
+        if "referral" in self.fields:
+            me = me_of(request) if request else None
+            qs = Referral.objects.exclude(status="released")
+            self.fields["referral"].queryset = qs if request and request.user.is_superuser else qs.filter(consultant=me) if me else qs.none()
+            self.fields["referral"].label_from_instance = lambda r: (f"{r.parent_name or r.student_name}"
+                + (f"（学生：{r.student_name}）" if r.parent_name and r.student_name else "") + (f" · {r.phone}" if r.phone else ""))
 
     def clean(self):
         d = super().clean()
+        r = d.get("referral")
+        if r:  # fill what was left blank from the chosen client (the parent is the one who becomes a 推荐渠道)
+            for f, v in (("name_zh", r.parent_name or r.student_name), ("phone", r.phone), ("wechat_id", r.wechat), ("email", r.email)):
+                if not d.get(f) and v: d[f] = self.cleaned_data[f] = v
+        for f, label in (("name_zh", "姓名"), ("phone", "电话")):
+            if not d.get(f): self.add_error(f, f"请填写{label}，或在上面选择一位客户。")
         if d.get("decision") == "approve":
             ph = "".join(ch for ch in (d.get("phone") or "") if ch.isdigit())[-8:]
             if ph:
@@ -748,11 +765,15 @@ class ApplicationAdmin(admin.ModelAdmin):
 
     def get_form(self, request, obj=None, **kw):
         kw["form"] = ApplicationForm
-        if not request.user.is_superuser: kw["fields"] = ("name_zh", "phone", "wechat_id", "email", "note")
-        return super().get_form(request, obj, **kw)
+        if not request.user.is_superuser: kw["fields"] = ("referral", "name_zh", "phone", "wechat_id", "email", "note")
+        Form = super().get_form(request, obj, **kw)
+
+        class F(Form):
+            def __init__(s, *a, **k): super().__init__(*a, request=request, **k)
+        return F
 
     def get_fieldsets(self, request, obj=None):
-        who = ("推荐的人", {"fields": ("name_zh", "phone", "wechat_id", "email", "note"),
+        who = ("推荐的人", {"fields": ("referral", "name_zh", "phone", "wechat_id", "email", "note"),
                            "description": "批准后，此人会成为你名下的“推荐渠道”顾问：你可以查看其客户（只读）。" if not request.user.is_superuser else ""})
         if obj is None: return (who,)
         info = ("申请资料", {"fields": ("applicant", "when", "status_col")})

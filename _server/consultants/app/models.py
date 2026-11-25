@@ -269,6 +269,8 @@ class Application(models.Model):
     """推荐新顾问: a consultant asks for one of their clients (or a friend) to become a 推荐渠道 under them.
     The company approves with one click: the account is created with 推荐人 = the applicant."""
     applicant = models.ForeignKey(Consultant, verbose_name="推荐人（申请人）", null=True, on_delete=models.SET_NULL, related_name="applications")
+    referral = models.ForeignKey("Referral", verbose_name="从我的客户中选择", null=True, blank=True, on_delete=models.SET_NULL, related_name="+",
+                                 help_text="可选：选择后，下面的姓名、电话、微信号、邮箱留空即可，系统会自动带入该客户（家长）的资料。")
     name_zh = models.CharField("姓名", max_length=60)
     phone = models.CharField("电话", max_length=40, help_text="连国家码，例如 +86 138 0000 0000")
     wechat_id = models.CharField("微信号", max_length=60, blank=True)
