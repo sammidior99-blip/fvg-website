@@ -212,3 +212,35 @@ def message_replied(m):
         send([consultant_email(m.sender)], f"【已回复】{m.subject}", _msg_rows(m), f"{m.sender.name_zh if m.sender else ''} 你好，你的请示与反馈有回复。")
     except Exception:
         log.exception("message_replied alert failed")
+
+
+# ------------------------------------------------------------------ 推荐新顾问
+def app_url(a): return f"{site()}/admin/consultants/application/{a.pk}/change/"
+
+
+def new_application(a):
+    try:
+        send(company(), f"【推荐新顾问】{a.applicant.name_zh if a.applicant else '—'} 推荐 {a.name_zh}",
+             [("推荐人", f"{a.applicant.name_zh}（{a.applicant.code}）" if a.applicant else "—"), ("姓名", a.name_zh), ("电话", a.phone),
+              ("微信号", a.wechat_id), ("邮箱", a.email), ("推荐说明", a.note), ("审批", app_url(a))],
+             "有一个新的推荐新顾问申请，请登录后台审批。")
+    except Exception:
+        log.exception("new_application alert failed")
+
+
+def application_decided(a):
+    """Tell the applicant: approved (with the login details to pass on) or rejected."""
+    try:
+        if not a.applicant: return
+        if a.status == "approved" and a.consultant:
+            u = a.consultant.user
+            rows = [("新顾问", a.name_zh), ("链接代号", a.consultant.code), ("专属链接", f"{site()}/s/{a.consultant.code}"),
+                    ("后台网址", f"{site()}/admin/"), ("登录名称", u.get_username() if u else ""), ("初始密码", a.temp_password),
+                    ("提醒", "请私下转交给新顾问；首次登录后系统会要求修改密码。")]
+            send([consultant_email(a.applicant)], f"【已批准】{a.name_zh} 已开通顾问账号", rows,
+                 f"{a.applicant.name_zh} 你好，你推荐的 {a.name_zh} 已获批准，账号资料如下：")
+        elif a.status == "rejected":
+            send([consultant_email(a.applicant)], f"【未获批准】推荐新顾问：{a.name_zh}",
+                 [("姓名", a.name_zh), ("原因", a.reject_reason or "—")], f"{a.applicant.name_zh} 你好，你的推荐新顾问申请未获批准。")
+    except Exception:
+        log.exception("application_decided alert failed")

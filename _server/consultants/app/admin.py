@@ -7,13 +7,13 @@ from django.contrib.auth.password_validation import validate_password
 from django.db.models import Count
 from django.utils.html import format_html, format_html_join
 
-from .models import PROTECT_DAYS, Consultant, LeadReport, LoginAttempt, Message, Referral, ReferralLog, TwoFactor
+from .models import PROTECT_DAYS, Application, Consultant, LeadReport, LoginAttempt, Message, Referral, ReferralLog, TwoFactor
 
 SITE = "https://summitbrilliance.com"
 GROUP = "销售顾问"
 ACCOUNT_TITLE = "顾问账户设置"  # what a consultant (not the boss) sees for their own 销售顾问 record
 GROUP_PERMS = ["view_referral", "change_referral", "add_referral", "view_consultant", "change_consultant", "view_leadreport",
-               "view_message", "add_message", "change_message"]
+               "view_message", "add_message", "change_message", "view_application", "add_application", "change_application"]
 
 
 def own(request):
@@ -701,6 +701,119 @@ class MessageAdmin(admin.ModelAdmin):
 
     @admin.display(description="回复")
     def reply_col(self, obj): return format_html('<div style="white-space:pre-wrap">{}</div>', obj.reply) if obj.reply else "（尚未回复）"
+
+
+# ================================================================ 推荐新顾问 (a consultant proposes; the company approves)
+class ApplicationForm(forms.ModelForm):
+    decision = forms.ChoiceField(label="审批", required=False, choices=[("", "暂不处理"), ("approve", "批准并开通账号"), ("reject", "拒绝")],
+                                 help_text="批准：系统自动开通“推荐渠道”顾问账号，推荐人 = 申请人，并把登录资料通知申请人。")
+
+    class Meta:
+        model = Application
+        fields = ("name_zh", "phone", "wechat_id", "email", "note", "reject_reason")
+
+    def clean(self):
+        d = super().clean()
+        if d.get("decision") == "approve":
+            ph = "".join(ch for ch in (d.get("phone") or "") if ch.isdigit())[-8:]
+            if ph:
+                for c in Consultant.objects.exclude(phone=""):
+                    if "".join(ch for ch in c.phone if ch.isdigit())[-8:] == ph:
+                        raise forms.ValidationError(f"电话与现有顾问 {c.name_zh}（{c.code}）相同，请确认是否重复申请。")
+        return d
+
+
+class ApplicationAdmin(admin.ModelAdmin):
+    list_display = ("when", "applicant", "name_zh", "phone", "wechat_id", "status_col", "new_col")
+    list_display_links = ("when", "name_zh")
+    list_filter = ("status",)
+    search_fields = ("name_zh", "phone", "wechat_id", "applicant__name_zh")
+    actions = ["approve_selected", "reject_selected"]
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request).select_related("applicant", "consultant", "consultant__user")
+        if request.user.is_superuser: return qs
+        me = me_of(request)
+        return qs.filter(applicant=me) if me else qs.none()
+
+    def get_actions(self, request):
+        return super().get_actions(request) if request.user.is_superuser else {}
+
+    def has_add_permission(self, request): return bool(me_of(request)) and super().has_add_permission(request)
+    def has_delete_permission(self, request, obj=None): return request.user.is_superuser
+
+    def has_change_permission(self, request, obj=None):
+        if obj is not None and obj.status != "pending": return False  # handled: read-only for everybody
+        return super().has_change_permission(request, obj)
+
+    def get_form(self, request, obj=None, **kw):
+        kw["form"] = ApplicationForm
+        if not request.user.is_superuser: kw["fields"] = ("name_zh", "phone", "wechat_id", "email", "note")
+        return super().get_form(request, obj, **kw)
+
+    def get_fieldsets(self, request, obj=None):
+        who = ("推荐的人", {"fields": ("name_zh", "phone", "wechat_id", "email", "note"),
+                           "description": "批准后，此人会成为你名下的“推荐渠道”顾问：你可以查看其客户（只读）。" if not request.user.is_superuser else ""})
+        if obj is None: return (who,)
+        info = ("申请资料", {"fields": ("applicant", "when", "status_col")})
+        if obj.status == "pending":
+            return (info, who) + ((("审批", {"fields": ("decision", "reject_reason")}),) if request.user.is_superuser else ())
+        res = ("审批结果", {"fields": ("decided_by", "decided_at", "account") if obj.status == "approved" else ("decided_by", "decided_at", "reject_reason")})
+        return (info, who, res)
+
+    def get_readonly_fields(self, request, obj=None):
+        return ("applicant", "when", "status_col", "decided_by", "decided_at", "account") + (("reject_reason",) if obj and obj.status != "pending" else ())
+
+    def save_model(self, request, obj, form, change):
+        from . import applications as AP
+        if not change: obj.applicant = me_of(request)
+        super().save_model(request, obj, form, change)
+        if not change: N.new_application(obj)
+        d = form.cleaned_data.get("decision") if request.user.is_superuser else ""
+        by = (me_of(request).name_zh if me_of(request) else "") or request.user.get_full_name() or request.user.get_username()
+        if d == "approve":
+            c = AP.approve(obj, by)
+            if c: messages.success(request, f"已批准：{c.name_zh}（{c.code}），登录名称 {c.user.get_username()}，初始密码 {obj.temp_password}。登录资料已通知申请人。")
+        elif d == "reject":
+            AP.reject(obj, by, obj.reject_reason)
+            messages.info(request, "已拒绝，并已通知申请人。")
+
+    @admin.action(description="批准所选申请（开通账号）")
+    def approve_selected(self, request, queryset):
+        from . import applications as AP
+        by = request.user.get_full_name() or request.user.get_username()
+        done = [c for a in queryset if (c := AP.approve(a, by))]
+        self.message_user(request, f"已批准 {len(done)} 个申请：" + "、".join(f"{c.name_zh}（{c.code}）" for c in done) if done else "所选申请都已处理过。")
+
+    @admin.action(description="拒绝所选申请")
+    def reject_selected(self, request, queryset):
+        from . import applications as AP
+        by = request.user.get_full_name() or request.user.get_username()
+        n = sum(1 for a in queryset if AP.reject(a, by))
+        self.message_user(request, f"已拒绝 {n} 个申请，并已通知申请人。")
+
+    @admin.display(description="申请时间", ordering="created_at")
+    def when(self, obj): return timezone.localtime(obj.created_at).strftime("%Y-%m-%d %H:%M") if obj.pk else "—"
+
+    @admin.display(description="审批状态", ordering="status")
+    def status_col(self, obj):
+        color = {"pending": "#b26a00", "approved": "#2e7d32", "rejected": "#c62828"}.get(obj.status, "inherit")
+        return format_html('<b style="color:{}">{}</b>', color, obj.get_status_display())
+
+    @admin.display(description="开通的顾问")
+    def new_col(self, obj): return f"{obj.consultant.name_zh}（{obj.consultant.code}）" if obj.consultant else "—"
+
+    @admin.display(description="账号资料（请私下转交新顾问）")
+    def account(self, obj):
+        c = obj.consultant
+        if not c: return "—"
+        pw = obj.temp_password or "（新顾问已自行修改密码）"
+        return format_html("<div>顾问：{}（{}）</div><div>后台网址：{}/admin/</div><div>登录名称：<b>{}</b></div><div>初始密码：<b>{}</b></div>"
+                           "<div>专属链接：{}/s/{}</div><div style='color:#667'>首次登录后系统会要求修改密码。</div>",
+                           c.name_zh, c.code, SITE, c.user.get_username() if c.user_id else "—", pw, SITE, c.code)
+
+
+admin.site.register(Application, ApplicationAdmin)
 
 
 # ================================================================ login security

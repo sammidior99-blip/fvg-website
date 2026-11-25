@@ -260,3 +260,32 @@ class Message(models.Model):
 
     def to_label(self):
         return f"{self.to_consultant.name_zh}（推荐人）" if self.to_consultant_id else "公司"
+
+
+APP_STATUS = [("pending", "待审批"), ("approved", "已批准"), ("rejected", "已拒绝")]
+
+
+class Application(models.Model):
+    """推荐新顾问: a consultant asks for one of their clients (or a friend) to become a 推荐渠道 under them.
+    The company approves with one click: the account is created with 推荐人 = the applicant."""
+    applicant = models.ForeignKey(Consultant, verbose_name="推荐人（申请人）", null=True, on_delete=models.SET_NULL, related_name="applications")
+    name_zh = models.CharField("姓名", max_length=60)
+    phone = models.CharField("电话", max_length=40, help_text="连国家码，例如 +86 138 0000 0000")
+    wechat_id = models.CharField("微信号", max_length=60, blank=True)
+    email = models.EmailField("邮箱", blank=True, help_text="可选：新顾问收取客户通知用")
+    note = models.TextField("推荐说明", blank=True, help_text="例如：原本是我的客户，愿意介绍朋友")
+    status = models.CharField("审批状态", max_length=10, choices=APP_STATUS, default="pending")
+    reject_reason = models.CharField("拒绝原因", max_length=200, blank=True)
+    consultant = models.ForeignKey(Consultant, verbose_name="开通的顾问", null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    temp_password = models.CharField("初始密码", max_length=40, blank=True)
+    must_change = models.BooleanField("首次登录须修改密码", default=False)
+    decided_by = models.CharField("审批人", max_length=80, blank=True)
+    decided_at = models.DateTimeField("审批时间", null=True, blank=True)
+    created_at = models.DateTimeField("申请时间", auto_now_add=True)
+
+    class Meta:
+        verbose_name = verbose_name_plural = "推荐新顾问"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.name_zh}（{self.get_status_display()}）"

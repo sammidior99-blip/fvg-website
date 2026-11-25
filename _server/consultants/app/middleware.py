@@ -60,4 +60,12 @@ class TwoFactorMiddleware:
                 return HttpResponseRedirect("/admin/2fa/verify/?next=" + quote(request.get_full_path()))
             if tf and tf.required and not tf.enabled:
                 return HttpResponseRedirect("/admin/2fa/")
+            # a consultant opened through 推荐新顾问: first set their own password
+            from .applications import must_change, password_changed
+            if request.path.startswith("/admin/password_change/done/"):
+                password_changed(user)
+            elif must_change(user) and not request.path.startswith("/admin/password_change/"):
+                from django.contrib import messages
+                messages.warning(request, "首次登录，请先修改密码（“旧密码”填写收到的初始密码）。")
+                return HttpResponseRedirect("/admin/password_change/")
         return self.get_response(request)
