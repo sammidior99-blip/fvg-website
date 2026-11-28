@@ -2,54 +2,148 @@
 {% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">首页</a> › 销售顾问 › 关系图</div>{% endblock %}
 {% block content %}
 <style>
-.fvt-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 14px}
+.fvt-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 10px}
 .fvt-bar input{min-width:240px;padding:6px 10px}
 .fvt-bar button{padding:6px 12px;cursor:pointer}
-.fvt-sum{color:var(--body-quiet-color,#666);margin:0 0 12px}
-.fvt ul{list-style:none;margin:0;padding-left:22px;border-left:1px dashed var(--hairline-color,#ccc)}
-.fvt>ul{padding-left:0;border-left:0}
-.fvt li{margin:4px 0;line-height:1.7;list-style:none}
-.fvt summary{cursor:pointer;padding:3px 0}
-.fvt li.fvt-p>details>summary{font-size:14px}
+.fvt-bar .fvt-sep{width:1px;height:22px;background:var(--hairline-color,#ccc);margin:0 4px}
+.fvt-bar #fvt-zv{min-width:44px;text-align:center;color:var(--body-quiet-color,#666);font-size:12.5px}
+.fvt-sum{color:var(--body-quiet-color,#666);margin:0 0 10px}
+
+/* canvas: scrolls both ways, drag the background to move around */
+.fvt-cv{overflow:auto;border:1px solid var(--hairline-color,#e2e2e2);border-radius:8px;background:
+  radial-gradient(circle,var(--hairline-color,#e4e4e4) 1px,transparent 1px) 0 0/18px 18px;
+  height:calc(100vh - 260px);min-height:420px;cursor:grab}
+.fvt-cv.fvt-drag{cursor:grabbing;user-select:none}
+.fvt{--ln:#c9b88f;display:inline-block;padding:24px 40px 24px 24px;min-width:100%;box-sizing:border-box}
+
+/* mind map: each branch is a row [node][children], children stacked, joined by lines */
+.fvt ul{list-style:none;margin:0 0 0 34px;padding:0;display:flex;flex-direction:column;justify-content:center;position:relative}
+.fvt ul::before{content:"";position:absolute;left:-34px;top:50%;width:34px;border-top:2px solid var(--ln)}
+.fvt li{list-style:none;display:flex;align-items:center;position:relative;padding:5px 0 5px 17px;margin:0}
+.fvt li::before{content:"";position:absolute;left:0;top:0;bottom:0;border-left:2px solid var(--ln)}
+.fvt li::after{content:"";position:absolute;left:0;top:50%;width:17px;border-top:2px solid var(--ln)}
+.fvt li.fvt-f::before{top:50%}
+.fvt li.fvt-l::before{bottom:50%}
+.fvt li.fvt-f.fvt-l::before{display:none}
+.fvt li.fvt-hide{display:none}
+.fvt li.fvt-closed>ul{display:none}
+.fvt>.fvt-root{display:flex;align-items:center}
+.fvt>.fvt-root>ul{margin-left:40px}
+.fvt>.fvt-root>ul::before{left:-40px;width:40px}
+
+/* nodes */
+.fvt-n{position:relative;flex:none;background:var(--body-bg,#fff);border:1px solid var(--hairline-color,#ddd);border-radius:10px;
+  padding:7px 12px;line-height:1.5;box-shadow:0 1px 3px rgba(0,0,0,.08);max-width:300px}
+.fvt-n .fvt-t{white-space:nowrap}
+.fvt-n a{text-decoration:none}
+.fvt-n a:hover{text-decoration:underline}
+.fvt-hub{background:#0F2340;color:#fff;border:0;border-radius:14px;padding:14px 18px;font-size:15px}
+.fvt-hub b{font-size:16px}
+.fvt-hub .fvt-m{color:#d7c08a}
+.fvt-person{border-left:5px solid #0F2340;font-size:13.5px}
+.fvt-k-channel{border-left-color:#9A6B0A}
+.fvt-k-none{border-left-color:#757575}
+.fvt-lead{border-left:5px solid var(--c);font-size:13px;border-radius:8px;padding:5px 10px}
+.fvt li.fvt-empty>.fvt-n{color:var(--body-quiet-color,#999);font-size:12.5px;box-shadow:none;border-style:dashed}
 .fvt-tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:10px;margin-right:6px;color:#fff;vertical-align:1px}
 .fvt-staff{background:#0F2340}.fvt-channel{background:#9A6B0A}.fvt-none{background:#757575}
-.fvt-st{display:inline-block;font-size:11px;padding:0 7px;border-radius:10px;color:#fff;margin-left:4px}
-.fvt-m{color:var(--body-quiet-color,#667);font-size:12.5px}
-.fvt-ico{color:#9A6B0A;font-size:9px;margin-right:6px;vertical-align:2px}
+.fvt-st{display:inline-block;font-size:11px;padding:0 7px;border-radius:10px;color:#fff;margin-left:6px;background:var(--c)}
+.fvt-m{color:var(--body-quiet-color,#667);font-size:12px}
+.fvt-x{font-size:12px}
 .fvt-off{color:#c62828;font-size:12px}
-.fvt-empty{color:var(--body-quiet-color,#999);font-size:12.5px}
-.fvt code{font-size:12px}
-.fvt .fvt-hide{display:none}
+.fvt code{font-size:11.5px}
 .fvt mark{background:#ffe58f;padding:0}
+.fvt-n.fvt-hit{outline:2px solid #f0b400;outline-offset:2px}
+
+/* collapse / expand button on the right edge of a node */
+.fvt-tg{position:absolute;right:-11px;top:50%;transform:translateY(-50%);width:20px;height:20px;border-radius:50%;padding:0;
+  border:1px solid var(--ln,#c9b88f);background:var(--body-bg,#fff);color:#9A6B0A;font:bold 12px/18px sans-serif;cursor:pointer;z-index:1}
+.fvt-closed>.fvt-n>.fvt-tg{width:auto;min-width:20px;padding:0 6px;border-radius:10px;right:auto;left:calc(100% - 10px);transform:translateY(-50%);background:#9A6B0A;color:#fff}
+.fvt-closed>.fvt-n{margin-right:24px}
 </style>
 <div class="fvt-bar">
   <input type="search" id="fvt-q" placeholder="搜索顾问、客户姓名或电话">
   <button type="button" id="fvt-open">全部展开</button>
   <button type="button" id="fvt-close">只看顾问</button>
+  <span class="fvt-sep"></span>
+  <button type="button" id="fvt-zo" title="缩小">－</button>
+  <span id="fvt-zv">100%</span>
+  <button type="button" id="fvt-zi" title="放大">＋</button>
+  <button type="button" id="fvt-zf">适合窗口</button>
 </div>
-<p class="fvt-sum">顾问 {{ totals.people }} 位（其中推荐渠道 {{ totals.channel }} 位） · 客户 {{ totals.leads }} 位 · 已签约 {{ totals.signed }} 位。
-点击客户姓名可查看客户资料、进度和报备顾问；点击顾问姓名可查看顾问资料。客户成为推荐渠道后，其介绍的客户会显示在该客户下面。</p>
-<div class="fvt" id="fvt"><ul>{{ tree }}</ul></div>
+<p class="fvt-sum">点击顾问或客户姓名可打开资料；点击节点旁的 −／＋ 可收起或展开该分支；拖动空白处可移动画面，按住 Ctrl 滚动滚轮可缩放。
+客户成为推荐渠道后，其介绍的客户会从该客户延伸出去。</p>
+<div class="fvt-cv" id="fvt-cv">
+  <div class="fvt" id="fvt">
+    <div class="fvt-root">
+      <div class="fvt-n fvt-hub"><b>Summit Brilliance</b><div class="fvt-m">顾问 {{ totals.people }} 位（推荐渠道 {{ totals.channel }} 位）</div>
+        <div class="fvt-m">客户 {{ totals.leads }} 位 · 已签约 {{ totals.signed }} 位</div></div>
+      <ul>{{ tree }}</ul>
+    </div>
+  </div>
+</div>
 <script>
 (function () {
-  var root = document.getElementById('fvt'), q = document.getElementById('fvt-q');
-  function lis() { return root.querySelectorAll('li'); }
-  function own(li) { var s = li.querySelector(':scope>details>summary'); return (s || li).textContent; }
+  var cv = document.getElementById('fvt-cv'), root = document.getElementById('fvt'), q = document.getElementById('fvt-q');
+  function all(sel) { return Array.prototype.slice.call(root.querySelectorAll(sel)); }
+  function node(li) { return li.querySelector(':scope>.fvt-n'); }
+  function kids(li) { var u = li.querySelector(':scope>ul'); return u ? u.children.length : 0; }
+
+  // a −／＋ button on every node that has a branch; when closed it shows how many it hides
+  function label(li) { var b = node(li).querySelector(':scope>.fvt-tg'); if (b) b.textContent = li.classList.contains('fvt-closed') ? '+' + li.querySelectorAll('li:not(.fvt-empty)').length : '−'; }
+  function lines() {   // the branch line runs from the first to the last child that is shown
+    all('ul').forEach(function (u) {
+      var v = Array.prototype.filter.call(u.children, function (li) { li.classList.remove('fvt-f', 'fvt-l'); return !li.classList.contains('fvt-hide'); });
+      if (v.length) { v[0].classList.add('fvt-f'); v[v.length - 1].classList.add('fvt-l'); }
+    });
+  }
+  lines();
+  function setClosed(li, closed) { li.classList.toggle('fvt-closed', closed); label(li); }
+  all('li').forEach(function (li) {
+    if (!li.querySelector(':scope>ul')) return;
+    var b = document.createElement('button'); b.type = 'button'; b.className = 'fvt-tg';
+    b.onclick = function (e) { e.stopPropagation(); setClosed(li, !li.classList.contains('fvt-closed')); };
+    node(li).appendChild(b); label(li);
+  });
+
   q.addEventListener('input', function () {
     var v = q.value.trim().toLowerCase();
-    var all = Array.prototype.slice.call(lis()).reverse();   // children first
-    all.forEach(function (li) {
-      if (!v) { li.classList.remove('fvt-hide'); return; }
-      var hit = own(li).toLowerCase().indexOf(v) >= 0 && !li.classList.contains('fvt-empty');
-      var child = li.querySelector('li:not(.fvt-hide)');
+    all('li').reverse().forEach(function (li) {   // children first
+      var n = node(li);
+      if (!v) { li.classList.remove('fvt-hide'); n.classList.remove('fvt-hit'); return; }
+      var hit = !li.classList.contains('fvt-empty') && n.textContent.toLowerCase().indexOf(v) >= 0;
+      var child = li.querySelector(':scope>ul>li:not(.fvt-hide)');
+      n.classList.toggle('fvt-hit', hit);
       li.classList.toggle('fvt-hide', !(hit || child));
-      if (child) { var d = li.querySelector(':scope>details'); if (d) d.open = true; }
+      if (child) setClosed(li, false);
     });
+    lines();
+    var first = root.querySelector('.fvt-hit'); if (first) first.scrollIntoView({block: 'center', inline: 'center', behavior: 'smooth'});
   });
-  document.getElementById('fvt-open').onclick = function () { root.querySelectorAll('details').forEach(function (d) { d.open = true; }); };
-  document.getElementById('fvt-close').onclick = function () {
-    root.querySelectorAll('li.fvt-p>details').forEach(function (d) { d.open = !!d.querySelector('li.fvt-p'); });
+  document.getElementById('fvt-open').onclick = function () { all('li').forEach(function (li) { if (kids(li)) setClosed(li, false); }); };
+  document.getElementById('fvt-close').onclick = function () {   // keep the consultant lines, fold away the clients
+    all('li').forEach(function (li) { if (kids(li)) setClosed(li, !li.querySelector(':scope>ul>li.fvt-p, :scope>ul>li li.fvt-p')); });
   };
+
+  // zoom
+  var z = 1, zv = document.getElementById('fvt-zv');
+  function zoom(to) { z = Math.max(0.3, Math.min(1.6, to)); root.style.zoom = z; zv.textContent = Math.round(z * 100) + '%'; }
+  document.getElementById('fvt-zi').onclick = function () { zoom(z + 0.1); };
+  document.getElementById('fvt-zo').onclick = function () { zoom(z - 0.1); };
+  document.getElementById('fvt-zf').onclick = function () {
+    root.style.zoom = 1; var w = root.scrollWidth, h = root.scrollHeight;
+    zoom(Math.min(1, (cv.clientWidth - 4) / w, (cv.clientHeight - 4) / h));
+  };
+  cv.addEventListener('wheel', function (e) { if (!e.ctrlKey) return; e.preventDefault(); zoom(z + (e.deltaY < 0 ? 0.1 : -0.1)); }, {passive: false});
+
+  // drag the background to pan
+  var drag = null;
+  cv.addEventListener('mousedown', function (e) {
+    if (e.button !== 0 || e.target.closest('a,button,.fvt-n')) return;
+    drag = {x: e.clientX, y: e.clientY, l: cv.scrollLeft, t: cv.scrollTop}; cv.classList.add('fvt-drag'); e.preventDefault();
+  });
+  window.addEventListener('mousemove', function (e) { if (drag) { cv.scrollLeft = drag.l - (e.clientX - drag.x); cv.scrollTop = drag.t - (e.clientY - drag.y); } });
+  window.addEventListener('mouseup', function () { drag = null; cv.classList.remove('fvt-drag'); });
 })();
 </script>
 {% endblock %}
