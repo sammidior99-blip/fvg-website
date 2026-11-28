@@ -1,5 +1,14 @@
-<div class="fv-scroll"><table>
-<thead><tr><th></th><th>报备</th>{% for k, v in statuses %}<th>{{ v }}</th>{% endfor %}<th>成交率</th><th>成交金额</th><th>保护中</th><th>待跟进</th></tr></thead>
-<tbody>{% for name, s in groups %}<tr><td>{{ name }}</td><td>{{ s.total }}</td>{% for k, v in statuses %}<td>{% for kk, n in s.by.items %}{% if kk == k %}{{ n }}{% endif %}{% endfor %}</td>{% endfor %}<td>{{ s.rate }}</td><td>{{ s.amount_text }}</td><td>{{ s.protected }}</td><td>{{ s.due }}</td></tr>
-{% empty %}<tr><td colspan="12" class="muted">暂无资料</td></tr>{% endfor %}</tbody>
+<div class="fv-legend">{% for k, v in statuses %}<span><i class="c-{{ k }}"></i>{{ v }}</span>{% endfor %}</div>
+<div class="fv-tbl"><table>
+<thead><tr><th></th><th>报备</th><th class="mix">进度分布</th><th>已签约</th><th>成交率</th><th>成交金额</th><th>保护中</th><th>待跟进</th></tr></thead>
+<tbody>{% for name, s in groups %}<tr>
+<td class="name">{{ name }}</td>
+<td class="strong">{{ s.total }}</td>
+<td class="mix"><div class="fv-mix">{% for k, v, n, share, w in s.stages %}{% if n %}<span class="c-{{ k }}" style="flex:{{ n }} 1 0" title="{{ v }}：{{ n }}">{{ n }}</span>{% endif %}{% endfor %}</div></td>
+<td class="{% if s.signed %}strong{% else %}zero{% endif %}">{{ s.signed }}</td>
+<td><span class="fv-pct"><span class="bar"><i style="width:{{ s.rate_num }}%"></i></span>{{ s.rate }}</span></td>
+<td class="fv-amts">{% for c, v in s.amount_list %}<div><span class="cur">{{ c }}</span>{{ v }}</div>{% empty %}<span class="zero">—</span>{% endfor %}</td>
+<td class="{% if not s.protected %}zero{% endif %}">{{ s.protected }}</td>
+<td>{% if s.due %}<span class="fv-badge hot">{{ s.due }}</span>{% else %}<span class="zero">0</span>{% endif %}</td>
+</tr>{% empty %}<tr><td colspan="8" class="zero">暂无资料</td></tr>{% endfor %}</tbody>
 </table></div>
